@@ -3,7 +3,7 @@ node_modules
 .gitignore
 .next
 .vercel
-apps/web
+apps/web/.next
 coverage
 *.log
 *.sqlite
