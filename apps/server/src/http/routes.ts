@@ -44,7 +44,13 @@ export function createRoutes(cfg: Config, store: Store): Router {
   r.post('/sessions', (req, res) => {
     const parsed = createSessionSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-    const caregiver = repos.caregiver.get(parsed.data.caregiver_id);
+    let caregiver = repos.caregiver.get(parsed.data.caregiver_id);
+    // The browser uses a fixed local MVP identity. On a freshly deployed database,
+    // its session request can arrive before the parallel onboarding-status request
+    // creates that identity; make the session endpoint safe for that first request.
+    if (!caregiver && parsed.data.caregiver_id === 'local-caregiver') {
+      caregiver = repos.caregiver.create({ id: 'local-caregiver', display_name: null });
+    }
     if (!caregiver) return res.status(404).json({ error: 'caregiver not found' });
     return res.status(201).json(repos.session.create(parsed.data.caregiver_id));
   });

@@ -89,6 +89,7 @@ describe('GET /health — degraded reporting (R1.2)', () => {
     const { app } = makeApp({
       DEEPGRAM_API_KEY: 'dg',
       ELEVENLABS_API_KEY: 'el',
+      ELEVENLABS_VOICE_ID: 'voice',
       ANTHROPIC_API_KEY: 'an',
       OPENAI_API_KEY: 'oa',
     });
@@ -109,6 +110,29 @@ describe('GET /health — degraded reporting (R1.2)', () => {
     const disabledKeys = body.disabledCapabilities.map((d: { capability: string }) => d.capability);
     expect(disabledKeys).not.toContain('llm');
     expect(disabledKeys.sort()).toEqual(['asr', 'embeddings', 'tts']);
+  });
+});
+
+describe('POST /sessions — first deployed session', () => {
+  it('bootstraps the fixed local MVP caregiver on a fresh database', async () => {
+    const { app, store } = makeApp(EMPTY);
+    const { status, body } = await request(app, 'POST', '/sessions', {
+      caregiver_id: 'local-caregiver',
+    });
+
+    expect(status).toBe(201);
+    expect(body.id).toEqual(expect.any(String));
+    expect(store.repos.caregiver.get('local-caregiver')).not.toBeNull();
+  });
+
+  it('does not create arbitrary caregiver ids through the session endpoint', async () => {
+    const { app } = makeApp(EMPTY);
+    const { status, body } = await request(app, 'POST', '/sessions', {
+      caregiver_id: 'unknown-caregiver',
+    });
+
+    expect(status).toBe(404);
+    expect(body.error).toBe('caregiver not found');
   });
 });
 
