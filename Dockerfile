@@ -26,7 +26,7 @@ COPY kb ./kb
 # Build knowledge base into sqlite database
 RUN npm run kb:build -w @turtle/server
 
-# Create data directory for persistent SQLite volume
+# Create data directory for persistent SQLite storage
 RUN mkdir -p /app/apps/server/data
 
 # Environment configuration
