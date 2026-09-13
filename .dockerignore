@@ -1,0 +1,17 @@
+node_modules
+.git
+.gitignore
+.next
+.vercel
+apps/web
+coverage
+*.log
+*.sqlite
+*.sqlite-journal
+data
+.env
+.env.*
+.DS_Store
+__pycache__
+*.py[cod]
+*.tsbuildinfo

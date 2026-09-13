@@ -1,9 +1,16 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { APPOINTMENT_STATUSES, DIAGNOSES, LOG_CATEGORIES } from '@turtle/shared';
+import {
+  AI_DISCLOSURE,
+  APPOINTMENT_STATUSES,
+  DIAGNOSES,
+  LOG_CATEGORIES,
+  caregiverPrefsSchema,
+} from '@turtle/shared';
 import type { Config } from '../config.js';
 import type { Store } from '../store/index.js';
 import { createCardService } from '../services/cards/index.js';
+import { computeMetrics, listFlaggedTranscripts } from '../observability/index.js';
 
 /**
  * REST control plane (§22). The same store backs the voice path, so these entities
@@ -184,6 +191,79 @@ export function createRoutes(cfg: Config, store: Store): Router {
     const parsed = createCaregiverSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     return res.status(201).json(repos.caregiver.create({ display_name: parsed.data.display_name ?? null }));
+  });
+
+  r.get('/caregivers/:id', (req, res) => {
+    const cg = repos.caregiver.get(req.params.id);
+    return cg ? res.json(cg) : res.status(404).json({ error: 'not found' });
+  });
+
+  // ---- Onboarding, consent, and AI disclosure (Task 33, R16.10) ----
+  // The client gates the first session on this: it needs explicit consent to
+  // recording/storage AND a patient profile before talking. The status endpoint tells
+  // the client whether to run onboarding, and carries the AI disclosure copy so the
+  // first-run introduction ("Turtle is software — an AI…") is served from one source.
+  //
+  // Local single-user MVP: the caregiver row is created lazily here if it does not yet
+  // exist, so a fresh client (fixed caregiver id) always resolves a real onboarding
+  // state rather than 404ing. This mirrors the auth seam left in place for later.
+  r.get('/onboarding/status', (req, res) => {
+    const caregiverId = (req.query.caregiver_id as string) ?? '';
+    if (caregiverId.trim().length === 0) {
+      return res.status(400).json({ error: 'caregiver_id required' });
+    }
+    let cg = repos.caregiver.get(caregiverId);
+    if (!cg) cg = repos.caregiver.create({ id: caregiverId, display_name: null });
+    const patient = repos.patient.getByCaregiver(cg.id);
+    const hasConsent = cg.consent_at != null;
+    const hasProfile = patient != null;
+    return res.json({
+      caregiver_id: cg.id,
+      // Onboarding is required until BOTH consent and a patient profile exist (R16.10:
+      // explicit consent before the first session; the profile is the minimal form).
+      needsOnboarding: !(hasConsent && hasProfile),
+      hasConsent,
+      hasProfile,
+      consent_at: cg.consent_at,
+      prefs: cg.prefs,
+      // AI disclosure copy for the first-run introduction (served from shared constants).
+      disclosure: AI_DISCLOSURE,
+    });
+  });
+
+  // POST /caregivers/:id/consent — record EXPLICIT consent to recording/storage before
+  // the first session (R16.10). Idempotent: re-consenting refreshes the timestamp. The
+  // caregiver row is created lazily so a first-run client can consent immediately.
+  r.post('/caregivers/:id/consent', (req, res) => {
+    let cg = repos.caregiver.get(req.params.id);
+    if (!cg) cg = repos.caregiver.create({ id: req.params.id, display_name: null });
+    repos.caregiver.setConsent(cg.id);
+    const updated = repos.caregiver.get(cg.id);
+    return res.status(201).json(updated);
+  });
+
+  // PATCH /caregivers/:id/prefs — pick check-in time and voice preferences (R16.10).
+  // Merges the supplied prefs into the caregiver prefs JSON, preserving other keys.
+  r.patch('/caregivers/:id/prefs', (req, res) => {
+    const parsed = caregiverPrefsSchema.partial().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    const updated = repos.caregiver.updatePrefs(req.params.id, parsed.data);
+    return updated ? res.json(updated) : res.status(404).json({ error: 'not found' });
+  });
+
+  // ---- Observability & metrics (Task 36, R15.4/R5.5) ----
+  // GET /observability/flagged — owner review view for flagged transcripts (R5.5).
+  // Surfaces every session marked crisis/medical_refusal with its full transcript and
+  // the specific flagged turns marked. Human-in-the-loop by design.
+  r.get('/observability/flagged', (_req, res) => {
+    return res.json({ transcripts: listFlaggedTranscripts(repos) });
+  });
+
+  // GET /observability/metrics — lightweight metrics snapshot: sessions/day, p50/p95
+  // response latency, refusal/crisis counts, and grounded-answer rate. A small pull the
+  // owner can read without a full analytics pipeline (design.md §Observability).
+  r.get('/observability/metrics', (_req, res) => {
+    return res.json(computeMetrics(repos));
   });
 
   // ---- Privacy: one-click delete everything ----

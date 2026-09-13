@@ -99,6 +99,46 @@ export {
 } from './guardrail.js';
 
 /**
+ * Crisis protocol composer (Task 31, R13.1–R13.5 / R5.5). Deterministic crisis handler:
+ * on a `crisis` safety flag the turn BYPASSES normal routing and lands here. Responds
+ * gently and validates without continuing normal conversation (R13.1), speaks the 988
+ * Suicide & Crisis Lifeline and encourages contacting the care team / a trusted person
+ * (R13.2), emits a `safety` card carrying the same resources so they are BOTH spoken
+ * AND shown (R13.3 / R13.5), and flags the turn `crisis` for owner review (R13.4 / R5.5).
+ * The spoken-AND-shown rule is enforced IN CODE: {@link assertCrisisSpokenAndShown}
+ * rejects a card-only or spoken-only crisis response and {@link enforceCrisisSpokenAndShown}
+ * repairs one back to the canonical protocol. Like the medical refusal, the output
+ * conforms to the response contract and flows through the same validate-before-speaking
+ * gate (Task 15).
+ */
+export {
+  composeCrisisResponse,
+  assertCrisisSpokenAndShown,
+  enforceCrisisSpokenAndShown,
+} from './crisis.js';
+
+/**
+ * Safety classifier — the seed implementation (Task 16, R5.1–R5.3; hardened by the eval
+ * harness in Task 34, R5.6/R15.1/R15.3). The FIRST step of every turn: runs on the raw user
+ * text BEFORE any routing (safety.md §Order of operations) and returns a {@link SafetyVerdict}
+ * — `crisis` (suicidal ideation / self-harm / abuse), `medical` (a request for a CLINICAL
+ * DECISION: medication selection/dosing/timing/interactions, prognosis/life-expectancy,
+ * symptom triage), or `none` (everything else, INCLUDING benign medically-adjacent caregiver
+ * observation and venting). Crisis and medical verdicts bypass normal routing — crisis → the
+ * crisis protocol, medical → the guardrail refusal — so this module gates the whole pipeline.
+ * Deterministic and LLM-free (keyword/phrase rules, in the mode-router style) so it works with
+ * zero keys and its verdict is fully testable; it BIASES UNCERTAIN CASES TOWARD FLAGGING
+ * (R5.2) and does NOT over-refuse benign caregiver talk (R5.6). `createSafetyClassifier`
+ * returns a {@link SafetyClassifier}; `classifySafety` is the synchronous testable core.
+ */
+export {
+  createSafetyClassifier,
+  classifySafety,
+  isCrisis,
+  isMedical,
+} from './safety.js';
+
+/**
  * Mode router (Task 18, R6.1). Rules-first routing (log dictation, appointment/prep
  * retrieval, diagnosis Q&A) then a small LLM intent classification for the rest,
  * degrading gracefully to `checkin` with no live LLM. Runs AFTER the safety
@@ -355,3 +395,45 @@ export {
   type SummaryQuery,
   type SummaryKind,
 } from './summary-retrieval.js';
+
+/**
+ * Recap & session close — `recap.prompt` (Task 32, R2.6 / R7.5 / R14.1–R14.3). The
+ * session-closing composer: a closing phrase ("I have to go") routes the session to
+ * CLOSING (deterministic {@link isClosingPhrase}) and this composer speaks a BRIEF,
+ * warm recap of what was covered (R14.1) AND emits a single retained recap card
+ * summarizing the session (R7.5/R14.2) — so the close is both spoken and shown. The
+ * covered topics are INJECTED (the composer only sees the closing turn), phrased warmly
+ * with a live LLM and degrading to a deterministic recap with zero keys so the close
+ * still lands within R2.6's 20s budget. The recap card carries a stable title
+ * ({@link RECAP_CARD_TITLE}); the gateway recognizes it via {@link isRecapCard} to
+ * persist it as the session's long-term artifact (`session.recap_card_id`, R14.3).
+ * `createRecapRunner` returns a {@link ModeRunner}; `runRecap` is the testable core.
+ */
+export {
+  createRecapRunner,
+  runRecap,
+  isClosingPhrase,
+  isRecapCard,
+  composeRecapSay,
+  buildRecapPrompt,
+  buildDeterministicRecap,
+  buildRecapCard,
+  RECAP_SYSTEM,
+  RECAP_TOPICS_PREFIX,
+  RECAP_CARD_TITLE,
+  RECAP_CLOSING_LINE,
+  RECAP_EMPTY_SAY,
+  MAX_RECAP_TOPICS,
+  type RecapDeps,
+} from './recap.js';
+
+/**
+ * Zero-key deterministic orchestrator wiring for end-to-end tests (Task 38). Assembles
+ * the safety-first turn spine — classifier → crisis/medical bypass → CLOSING recap →
+ * mode routing — from the already-deterministic composers, so the FULL conversation
+ * spine runs end-to-end over the real gateway with no API keys. `createE2eProcessor`
+ * returns an {@link Orchestrator} that satisfies the gateway's `TurnProcessor` seam.
+ * This is NOT the production orchestrator, but its safety/CLOSING behavior is identical
+ * because it calls the exact same composers.
+ */
+export { createE2eProcessor, type E2eProcessorDeps } from './e2e-processor.js';

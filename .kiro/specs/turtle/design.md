@@ -333,6 +333,8 @@ landing alongside each phase.
 - Audio discarded after transcription by default; transcripts retained; one-click delete-all.
 - Vendor posture documented so BAA-tier vendors and no-training terms can be enforced before any real caregiver dogfoods with real PHI.
 - Auth is local-only for MVP with a pluggable seam (magic link / provider) for later.
+- Implemented posture + enforcing code documented in `apps/server/PRIVACY.md` (audio-discard,
+  encryption-at-rest coverage, TLS/WSS, one-click `DELETE /everything`).
 
 ---
 

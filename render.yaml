@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: turtle-server
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    healthCheckPath: /health
+    disk:
+      name: turtle-data
+      mountPath: /app/apps/server/data
+      sizeGB: 1
+    envVars:
+      - key: PORT
+        value: 8787
+      - key: NODE_ENV
+        value: production
+      - key: TURTLE_DB_PATH
+        value: /app/apps/server/data/turtle.sqlite
+      - key: TURTLE_ENCRYPTION_KEY
+        generateValue: true
+      - key: DEEPGRAM_API_KEY
+        sync: false
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: ELEVENLABS_VOICE_ID
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false

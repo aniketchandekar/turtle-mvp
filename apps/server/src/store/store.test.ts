@@ -224,6 +224,21 @@ describe('repositories', () => {
     });
   });
 
+  it('records consent and merges caregiver prefs (Task 33, R16.10)', () => {
+    const cg = repos.caregiver.create({ display_name: 'Alex' });
+    expect(repos.caregiver.get(cg.id)?.consent_at).toBeNull();
+    repos.caregiver.setConsent(cg.id);
+    expect(repos.caregiver.get(cg.id)?.consent_at).toBeTruthy();
+
+    repos.caregiver.updatePrefs(cg.id, { checkin_time: '08:30', voice_id: 'v1' });
+    repos.caregiver.updatePrefs(cg.id, { pace: 1.0 });
+    const prefs = repos.caregiver.get(cg.id)?.prefs;
+    expect(prefs).toEqual({ checkin_time: '08:30', voice_id: 'v1', pace: 1.0 });
+
+    // Unknown caregiver is a no-op returning null.
+    expect(repos.caregiver.updatePrefs('missing', { pace: 1.0 })).toBeNull();
+  });
+
   it('deletes everything', () => {
     const cg = repos.caregiver.create({ display_name: 'Alex' });
     repos.session.create(cg.id);

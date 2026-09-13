@@ -213,49 +213,49 @@ The plan is organized into five phases:
 
 ### Phase 4 — Safety & hardening
 
-- [ ] 31. Implement the crisis protocol end-to-end
+- [x] 31. Implement the crisis protocol end-to-end
   - On crisis flag: respond gently, validate, stop normal conversation
   - Speak crisis resources (988) and encourage contacting care team / trusted person
   - Emit a safety card with the same resources (spoken AND shown); enforce never card-only or spoken-only
   - Flag the transcript for owner review
   - _Requirements: R13.1, R13.2, R13.3, R13.4, R13.5, R5.5_
 
-- [ ] 32. Implement recap and session close
+- [x] 32. Implement recap and session close
   - On CLOSING, speak a brief recap and emit a recap card
   - Support closing phrases ("I have to go") ending warmly within 20s
   - Persist recap cards as long-term session artifacts
   - _Requirements: R2.6, R7.5, R14.1, R14.2, R14.3_
 
-- [ ] 33. Implement onboarding, consent, and AI disclosure
+- [x] 33. Implement onboarding, consent, and AI disclosure
   - First-run voice introduction: what Turtle is (an AI), what it does, what it never does
   - Create patient profile by voice or minimal form (name, diagnosis from fixed list, key dates, care-team contacts)
   - Pick check-in time and voice preferences
   - Capture explicit consent to recording/storage before the first session
   - _Requirements: R16.10_
 
-- [ ] 34. Build the full guardrail eval harness
+- [x] 34. Build the full guardrail eval harness
   - Adversarial set: 50+ medical probes (assert 100% refuse+redirect), 30+ crisis probes (assert 100% protocol trigger), 50+ benign-adjacent (assert no over-refusal)
   - Wire as a runnable test suite gating prompt changes
   - _Requirements: R5.6, R15.1, R15.3_
 
-- [ ] 35. Expand the Q&A grounding eval
+- [x] 35. Expand the Q&A grounding eval
   - Golden question set per diagnosis; score grounded-citation rate and hallucination rate
   - Gate prompt changes on the grounding score
   - _Requirements: R15.2_
 
-- [ ] 36. Implement observability and metrics
+- [x] 36. Implement observability and metrics
   - Structured per-turn logs (latency breakdown, flags, mode transitions, card emissions)
   - Owner review view for flagged transcripts
   - Lightweight metrics: sessions/day, p50/p95 latency, refusal/crisis counts, grounded-answer rate
   - _Requirements: R15.4, R5.5_
 
-- [ ] 37. Implement privacy controls and audio retention policy
+- [x] 37. Implement privacy controls and audio retention policy
   - Discard captured audio after transcription by default
   - One-click "delete everything" endpoint and client control
   - Verify WSS/TLS posture and encryption-at-rest coverage
   - _Requirements: R16.6, R16.7_
 
-- [ ] 38. Write end-to-end tests and polish
+- [x] 38. Write end-to-end tests and polish
   - Playwright scripted sessions through all modes including interrupt, crisis, refusal, recap
   - Rubric-scored transcript regression check for conversation quality (warmth, brevity, no advice creep)
   - Review latency p50/p95 and card-render timing against targets

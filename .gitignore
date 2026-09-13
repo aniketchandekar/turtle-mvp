@@ -23,3 +23,9 @@ __pycache__/
 *.tsbuildinfo
 .vercel
 .env*
+
+# Playwright E2E artifacts
+/test-results/
+/playwright-report/
+/.playwright/
+.e2e-data/

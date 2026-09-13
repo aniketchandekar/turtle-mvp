@@ -8,6 +8,7 @@ import { cors } from './http/cors.js';
 import { createGateway } from './gateway/index.js';
 import { createDeepgramProvider } from './gateway/asr/deepgram-sdk.js';
 import { createElevenLabsProvider } from './gateway/tts/elevenlabs-sdk.js';
+import { createE2eProcessor } from './orchestrator/index.js';
 
 /**
  * Turtle backend entrypoint. Single Node service combining the Voice Gateway (WS) and
@@ -36,7 +37,16 @@ function main(): void {
   const wss = new WebSocketServer({ server, path: '/ws' });
   const asr = createDeepgramProvider(cfg);
   const tts = createElevenLabsProvider(cfg);
-  createGateway({ cfg, store, asr, tts }).attach(wss);
+  // The real orchestrator wiring lands with the production composition root; until then
+  // the gateway runs its canned stub processor. For END-TO-END TESTS the app can be
+  // booted with TURTLE_E2E_PROCESSOR=1 to wire the zero-key deterministic orchestrator
+  // (createE2eProcessor) so the browser client exercises the full conversation spine —
+  // all modes, crisis, medical refusal, and recap — with no API keys. This flag is
+  // OFF by default, so it never changes production behavior; it exists purely so the
+  // Playwright E2E can drive real contract-driven turns deterministically (Task 38).
+  const useE2eProcessor = (process.env.TURTLE_E2E_PROCESSOR ?? '').trim() === '1';
+  const processor = useE2eProcessor ? createE2eProcessor() : undefined;
+  createGateway({ cfg, store, asr, tts, ...(processor ? { processor } : {}) }).attach(wss);
 
   server.listen(cfg.port, () => {
     console.log(`\nTurtle server listening on http://localhost:${cfg.port}`);

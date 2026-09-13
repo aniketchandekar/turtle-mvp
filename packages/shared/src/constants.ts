@@ -40,6 +40,28 @@ export const QA_DECLINE_LINE =
 
 export const CHECKIN_OPENER = 'How are you holding up — honestly?';
 
+// First-run AI disclosure (R16.10 / honesty invariant). Spoken in the first session so
+// Turtle introduces itself as software: what it IS (an AI), what it DOES, and what it
+// NEVER does (no medical, dosing, or prognosis advice). One of the pre-rendered static
+// strings (design.md §TTS) so it is available immediately at sub-100ms latency.
+export const AI_DISCLOSURE = {
+  // Short spoken form used as the first-session greeting.
+  spoken:
+    "Before we start, I want to be honest with you: I'm Turtle, and I'm software — " +
+    "an AI, not a person. I'm here to listen, to help you understand the diagnosis in " +
+    "plain language, to get you ready for appointments, and to keep a simple care log. " +
+    "I will never give medical advice, dosing, or a prognosis — those are for your care " +
+    "team. Whenever you're ready, press and hold to talk.",
+  // Written form shown during onboarding, broken into the three honesty beats.
+  what_i_am: "Turtle is software — an AI companion, not a person and not a clinician.",
+  what_i_do:
+    "I listen, explain the diagnosis in plain language, help you prepare for " +
+    "appointments, and keep a simple hands-free care log.",
+  what_i_never_do:
+    "I never give medical advice, medication or dosing guidance, or a prognosis — " +
+    "those are always for your care team.",
+} as const;
+
 // The window before an appointment in which a prep briefing is offered.
 export const APPOINTMENT_PREP_WINDOW_HOURS = 48;
 

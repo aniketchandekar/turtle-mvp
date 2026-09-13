@@ -296,3 +296,252 @@ describe('Appointments REST — status changes (Task 28, R12.1)', () => {
     expect(res.status).toBe(400);
   });
 });
+
+
+describe('Onboarding, consent, and AI disclosure (Task 33, R16.10)', () => {
+  it('GET /onboarding/status requires a caregiver_id', async () => {
+    const { app } = makeApp(EMPTY);
+    const { status, body } = await getJson(app, '/onboarding/status');
+    expect(status).toBe(400);
+    expect(body.error).toBe('caregiver_id required');
+  });
+
+  it('reports needsOnboarding for a brand-new caregiver and carries the AI disclosure', async () => {
+    const { app } = makeApp(EMPTY);
+    const { status, body } = await getJson(app, '/onboarding/status?caregiver_id=local-caregiver');
+    expect(status).toBe(200);
+    // Fresh caregiver: no consent, no profile → onboarding required (R16.10).
+    expect(body.needsOnboarding).toBe(true);
+    expect(body.hasConsent).toBe(false);
+    expect(body.hasProfile).toBe(false);
+    // The first-run introduction copy is served from one source (shared constants):
+    // it must clearly say Turtle is an AI, what it does, and what it never does.
+    expect(body.disclosure.what_i_am.toLowerCase()).toContain('software');
+    expect(body.disclosure.spoken.toLowerCase()).toContain('ai');
+    expect(body.disclosure.what_i_never_do.toLowerCase()).toContain('prognosis');
+  });
+
+  it('lazily creates the caregiver so a first-run client resolves state, not a 404', async () => {
+    const { app, store } = makeApp(EMPTY);
+    expect(store.repos.caregiver.get('local-caregiver')).toBeNull();
+    await getJson(app, '/onboarding/status?caregiver_id=local-caregiver');
+    expect(store.repos.caregiver.get('local-caregiver')).not.toBeNull();
+  });
+
+  it('POST /caregivers/:id/consent records explicit consent before the first session', async () => {
+    const { app, store } = makeApp(EMPTY);
+    const res = await request(app, 'POST', '/caregivers/local-caregiver/consent');
+    expect(res.status).toBe(201);
+    expect(res.body.consent_at).toBeTruthy();
+    // Persisted on the caregiver row.
+    expect(store.repos.caregiver.get('local-caregiver')?.consent_at).toBeTruthy();
+  });
+
+  it('PATCH /caregivers/:id/prefs saves check-in time and voice preferences (merging)', async () => {
+    const { app, store } = makeApp(EMPTY);
+    // Bootstrap the caregiver via the status endpoint.
+    await getJson(app, '/onboarding/status?caregiver_id=local-caregiver');
+
+    const first = await request(app, 'PATCH', '/caregivers/local-caregiver/prefs', {
+      checkin_time: '09:00',
+      voice_id: 'voice-1',
+    });
+    expect(first.status).toBe(200);
+    expect(first.body.prefs.checkin_time).toBe('09:00');
+    expect(first.body.prefs.voice_id).toBe('voice-1');
+
+    // A second patch merges — updating pace without dropping the earlier keys.
+    const second = await request(app, 'PATCH', '/caregivers/local-caregiver/prefs', {
+      pace: 1.0,
+    });
+    expect(second.status).toBe(200);
+    expect(second.body.prefs.checkin_time).toBe('09:00');
+    expect(second.body.prefs.voice_id).toBe('voice-1');
+    expect(second.body.prefs.pace).toBe(1.0);
+    expect(store.repos.caregiver.get('local-caregiver')?.prefs.pace).toBe(1.0);
+  });
+
+  it('PATCH /caregivers/:id/prefs rejects an out-of-range pace', async () => {
+    const { app } = makeApp(EMPTY);
+    await getJson(app, '/onboarding/status?caregiver_id=local-caregiver');
+    const res = await request(app, 'PATCH', '/caregivers/local-caregiver/prefs', { pace: 5 });
+    expect(res.status).toBe(400);
+  });
+
+  it('PATCH /caregivers/:id/prefs 404s for an unknown caregiver', async () => {
+    const { app } = makeApp(EMPTY);
+    const res = await request(app, 'PATCH', '/caregivers/nope/prefs', { pace: 1.0 });
+    expect(res.status).toBe(404);
+  });
+
+  it('clears needsOnboarding once consent AND a patient profile exist (R16.10)', async () => {
+    const { app } = makeApp(EMPTY);
+    // Bootstrap + consent.
+    const boot = await getJson(app, '/onboarding/status?caregiver_id=local-caregiver');
+    expect(boot.body.needsOnboarding).toBe(true);
+    await request(app, 'POST', '/caregivers/local-caregiver/consent');
+
+    // Consent alone is not enough — the minimal profile (patient) is still required.
+    const afterConsent = await getJson(app, '/onboarding/status?caregiver_id=local-caregiver');
+    expect(afterConsent.body.hasConsent).toBe(true);
+    expect(afterConsent.body.hasProfile).toBe(false);
+    expect(afterConsent.body.needsOnboarding).toBe(true);
+
+    // Create the patient profile via the existing minimal-form endpoint.
+    const patient = await request(app, 'POST', '/patients', {
+      caregiver_id: 'local-caregiver',
+      name: 'Sam',
+      diagnosis: 'metastatic_cancer',
+      care_team: { nurse_line: '555-1234', other: [] },
+    });
+    expect(patient.status).toBe(201);
+
+    // Now both conditions are met → onboarding complete.
+    const done = await getJson(app, '/onboarding/status?caregiver_id=local-caregiver');
+    expect(done.body.hasConsent).toBe(true);
+    expect(done.body.hasProfile).toBe(true);
+    expect(done.body.needsOnboarding).toBe(false);
+  });
+});
+
+describe('Observability REST (Task 36, R15.4/R5.5)', () => {
+  it('GET /observability/flagged surfaces only flagged transcripts, turns marked', async () => {
+    const { app, store } = makeApp(EMPTY);
+    const cg = store.repos.caregiver.create({ display_name: 'Alex' });
+
+    // A flagged session (crisis) with two turns; the assistant turn carries the flag.
+    const flaggedSession = store.repos.session.create(cg.id);
+    store.repos.turn.create({
+      session_id: flaggedSession.id, seq: 1, speaker: 'user', text: 'I feel hopeless',
+      asr_conf: null, retrieved_chunk_ids: [], flag: null, latency_ms: null,
+    });
+    store.repos.turn.create({
+      session_id: flaggedSession.id, seq: 2, speaker: 'assistant', text: 'I hear you…',
+      asr_conf: null, retrieved_chunk_ids: [], flag: 'crisis', latency_ms: 950,
+    });
+    store.repos.session.addFlag(flaggedSession.id, 'crisis');
+
+    // An unflagged session that must NOT appear in the review view.
+    store.repos.session.create(cg.id);
+
+    const { status, body } = await getJson(app, '/observability/flagged');
+    expect(status).toBe(200);
+    expect(body.transcripts).toHaveLength(1);
+    expect(body.transcripts[0].session_id).toBe(flaggedSession.id);
+    expect(body.transcripts[0].flags).toEqual(['crisis']);
+    expect(body.transcripts[0].flagged_turn_count).toBe(1);
+  });
+
+  it('GET /observability/metrics returns the lightweight snapshot', async () => {
+    const { app, store } = makeApp(EMPTY);
+    const cg = store.repos.caregiver.create({ display_name: 'Alex' });
+    const s = store.repos.session.create(cg.id);
+    store.repos.turn.create({
+      session_id: s.id, seq: 1, speaker: 'assistant', text: 'grounded (source: c1)',
+      asr_conf: null, retrieved_chunk_ids: ['c1'], flag: null, latency_ms: 1200,
+    });
+
+    const { status, body } = await getJson(app, '/observability/metrics');
+    expect(status).toBe(200);
+    expect(body.total_sessions).toBe(1);
+    expect(body.latency_ms.count).toBe(1);
+    expect(body.latency_ms.p50).toBe(1200);
+    expect(body.grounded_answers.grounded).toBe(1);
+    expect(body.grounded_answers.rate).toBe(1);
+    expect(body.flags).toEqual({ crisis: 0, medical_refusal: 0 });
+    expect(Array.isArray(body.sessions_per_day)).toBe(true);
+  });
+
+  it('GET /observability/metrics is empty-safe on a fresh store', async () => {
+    const { app } = makeApp(EMPTY);
+    const { status, body } = await getJson(app, '/observability/metrics');
+    expect(status).toBe(200);
+    expect(body.total_sessions).toBe(0);
+    expect(body.grounded_answers.rate).toBeNull();
+  });
+});
+
+describe('Privacy — one-click delete everything DELETE /everything (Task 37, R16.7)', () => {
+  /**
+   * Seed one row in every caregiver-data table so the wipe is provably complete:
+   * caregiver → patient → appointment + log_entry, and a session → turn + card.
+   * Returns the ids the assertions read back after the delete.
+   */
+  function seedEverything(store: ReturnType<typeof makeApp>['store']) {
+    const { repos } = store;
+    const cg = repos.caregiver.create({ display_name: 'Alex' });
+    const patient = repos.patient.create({
+      caregiver_id: cg.id,
+      name: 'Sam',
+      diagnosis: 'metastatic_cancer',
+      diagnosis_notes: null,
+      care_team: { nurse_line: '555-1234', other: [] },
+    });
+    const appt = repos.appointment.create({
+      patient_id: patient.id,
+      title: 'Oncology',
+      with_whom: 'Dr. Lee',
+      at: new Date(Date.now() + 86_400_000).toISOString(),
+      purpose: 'follow-up',
+    });
+    const log = repos.logEntry.create({
+      patient_id: patient.id,
+      at: new Date().toISOString(),
+      category: 'symptom',
+      text: 'new cough',
+      structured: null,
+    });
+    const session = repos.session.create(cg.id);
+    const turn = repos.turn.create({
+      session_id: session.id,
+      seq: 1,
+      speaker: 'user',
+      text: 'I am scared',
+      asr_conf: null,
+      retrieved_chunk_ids: [],
+      flag: null,
+      latency_ms: null,
+    });
+    const card = repos.card.create({
+      session_id: session.id,
+      type: 'retained',
+      title: 'Note',
+      body: 'body',
+      action: null,
+    });
+    return { cg, patient, appt, log, session, turn, card };
+  }
+
+  it('DELETE /everything wipes all stored data and returns ok', async () => {
+    const { app, store } = makeApp(EMPTY);
+    const seeded = seedEverything(store);
+
+    const res = await request(app, 'DELETE', '/everything');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ ok: true });
+
+    // Every caregiver-data entity is gone (R16.7: one-click delete everything).
+    const { repos } = store;
+    expect(repos.caregiver.get(seeded.cg.id)).toBeNull();
+    expect(repos.patient.get(seeded.patient.id)).toBeNull();
+    expect(repos.appointment.get(seeded.appt.id)).toBeNull();
+    expect(repos.logEntry.list(seeded.patient.id)).toEqual([]);
+    expect(repos.session.get(seeded.session.id)).toBeNull();
+    expect(repos.turn.listBySession(seeded.session.id)).toEqual([]);
+    expect(repos.card.get(seeded.card.id)).toBeNull();
+    // The store-wide views are empty too.
+    expect(repos.session.listAll()).toEqual([]);
+    expect(repos.turn.listAll()).toEqual([]);
+  });
+
+  it('DELETE /everything is idempotent on an already-empty store', async () => {
+    const { app } = makeApp(EMPTY);
+    const first = await request(app, 'DELETE', '/everything');
+    expect(first.status).toBe(200);
+    expect(first.body).toEqual({ ok: true });
+    // Running it again on an empty store is a safe no-op, not an error.
+    const second = await request(app, 'DELETE', '/everything');
+    expect(second.status).toBe(200);
+    expect(second.body).toEqual({ ok: true });
+  });
+});

@@ -5,6 +5,7 @@ import { WebSocket, WebSocketServer } from 'ws';
 import { loadConfig, type Config, type EnvSource } from '../config.js';
 import { createStore, type Store } from '../store/index.js';
 import { createGateway, type TurnProcessor } from './index.js';
+import { RECAP_CARD_TITLE } from '../orchestrator/recap.js';
 import type { ServerMessage, TurnContract } from '@turtle/shared';
 
 /**
@@ -239,6 +240,50 @@ describe('SessionChannel — contract side effects + lifecycle (R2.7/R5.5/R6.5)'
 
     // CLOSING contract records the session end time (R2.7).
     expect(reloaded?.ended_at).not.toBeNull();
+    c.ws.close();
+  });
+
+  it('persists a recap card as the session long-term artifact on CLOSING (R7.5/R14.2/R14.3)', async () => {
+    // A processor that closes the session with a recap card (as the recap composer,
+    // Task 32, would emit). The gateway must persist it AND wire recap_card_id.
+    const processor: TurnProcessor = {
+      async handleTurn({ sessionId, turnId }): Promise<TurnContract> {
+        return {
+          session_id: sessionId,
+          turn_id: turnId,
+          state: 'CLOSING',
+          say: 'Today we talked about the nausea. Take care of yourself.',
+          cards: [
+            {
+              type: 'retained',
+              title: RECAP_CARD_TITLE,
+              body: '• the nausea getting worse\n• how tired you feel',
+            },
+          ],
+          memory_ops: [],
+          flags: ['none'],
+        };
+      },
+    };
+    harness = await makeHarness(EMPTY, processor);
+    const s = harness.store.repos.session.create(harness.caregiverId);
+    const c = connect(harness.url);
+    await c.open;
+    send(c.ws, { type: 'attach_session', session_id: s.id });
+    await waitFor(c.messages, (m) => m.some((x) => x.type === 'assistant_state' && x.state === 'LISTENING'));
+    send(c.ws, { type: 'text_input', text: 'I have to go' });
+    await waitFor(c.messages, (m) => m.some((x) => x.type === 'turn_contract'));
+
+    // The recap card is persisted from the contract (retained, recap title).
+    const cards = harness.store.repos.card.listByStatus('active');
+    expect(cards).toHaveLength(1);
+    expect(cards[0]?.title).toBe(RECAP_CARD_TITLE);
+    expect(cards[0]?.type).toBe('retained');
+
+    // The session is closed AND the recap card is wired as its long-term artifact (R14.3).
+    const reloaded = harness.store.repos.session.get(s.id);
+    expect(reloaded?.ended_at).not.toBeNull();
+    expect(reloaded?.recap_card_id).toBe(cards[0]?.id);
     c.ws.close();
   });
 

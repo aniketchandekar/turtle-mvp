@@ -9,7 +9,9 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit",
     "kb:build": "tsx src/scripts/build-kb.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "eval:guardrail": "vitest run --root ../.. -t \"guardrail eval\"",
+    "eval:grounding": "vitest run --root ../.. -t \"grounding eval\""
   },
   "dependencies": {
     "@deepgram/sdk": "3.9.0",
@@ -17,6 +19,7 @@
     "better-sqlite3": "^11.7.0",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "tsx": "^4.19.2",
     "ws": "^8.18.0",
     "zod": "^3.24.1"
   },
@@ -24,7 +27,6 @@
     "@types/better-sqlite3": "^7.6.12",
     "@types/express": "^5.0.0",
     "@types/ws": "^8.5.13",
-    "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
   }

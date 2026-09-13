@@ -22,12 +22,22 @@ import type { KbChunk } from '@turtle/shared';
  * Run with: `npm run kb:build --workspace @turtle/server`
  */
 
-/** Resolve the repo-root `kb/` directory from this file's location. */
+/** Resolve the `kb/` directory from environment or known relative locations. */
 function resolveKbDir(): string {
-  // dist/scripts or src/scripts → repo root is four levels up (…/apps/server/{dist|src}/scripts).
+  if (process.env.TURTLE_KB_PATH && fs.existsSync(process.env.TURTLE_KB_PATH)) {
+    return process.env.TURTLE_KB_PATH;
+  }
   const here = path.dirname(fileURLToPath(import.meta.url));
-  const repoRoot = path.resolve(here, '..', '..', '..', '..');
-  return path.join(repoRoot, 'kb');
+  const candidates = [
+    path.resolve(process.cwd(), 'kb'),
+    path.resolve(process.cwd(), '..', '..', 'kb'),
+    path.resolve(here, '..', '..', '..', 'kb'),
+    path.resolve(here, '..', '..', '..', '..', 'kb'),
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return path.resolve(here, '..', '..', '..', '..', 'kb');
 }
 
 /** Recursively collect `*.md` files under a directory (excluding the top-level README). */

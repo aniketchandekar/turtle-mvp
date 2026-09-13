@@ -9,6 +9,9 @@ import { type TranscriptLine } from '@/components/Transcript';
 import { CardSurface } from '@/components/CardSurface';
 import { DegradedBanner } from '@/components/DegradedBanner';
 import { useHealth } from '@/lib/useHealth';
+import { useOnboarding } from '@/lib/useOnboarding';
+import { Onboarding } from '@/components/Onboarding';
+import { PrivacyControls } from '@/components/PrivacyControls';
 import { useSession } from '@/lib/useSession';
 import type { AgentState } from '@/components/ui/orb';
 
@@ -34,6 +37,7 @@ function toAgentState(state: AssistantState, capturing: boolean): AgentState {
  */
 export default function Home() {
   const health = useHealth();
+  const onboarding = useOnboarding();
   const [mode, setMode] = useState<Mode>('voice');
   const [lines, setLines] = useState<TranscriptLine[]>([]);
   const [card, setCard] = useState<Card | null>(null);
@@ -113,6 +117,33 @@ export default function Home() {
     });
   }, [addLine]);
 
+  // First-run gate (Task 33, R16.10): the caregiver cannot start a session until they
+  // have seen the AI disclosure, created the minimal profile, and given explicit consent
+  // to recording/storage. Until then the app shows onboarding (or a calm connecting state
+  // while the status loads / the server is unreachable).
+  if (!onboarding.complete) {
+    if (onboarding.loading || onboarding.status === null) {
+      return (
+        <main
+          className="mx-auto grid h-[100dvh] w-full max-w-2xl place-items-center px-5"
+          aria-label="Turtle"
+        >
+          <p className="text-muted-foreground" role="status">
+            Connecting to Turtle…
+          </p>
+        </main>
+      );
+    }
+    return (
+      <Onboarding
+        disclosure={onboarding.disclosure}
+        submitting={onboarding.submitting}
+        error={onboarding.error}
+        onSubmit={(input) => void onboarding.submit(input)}
+      />
+    );
+  }
+
   return (
     <main
       className="mx-auto flex h-[100dvh] w-full max-w-2xl flex-col px-5 py-4 sm:px-6"
@@ -128,14 +159,18 @@ export default function Home() {
           </span>
           <span className="text-lg font-bold tracking-tight">Turtle</span>
         </div>
-        <Tabs
-          items={[
-            { value: 'voice', label: 'Voice' },
-            { value: 'text', label: 'Text' },
-          ]}
-          value={mode}
-          onValueChange={(v) => setMode(v as Mode)}
-        />
+        <div className="flex items-center gap-1.5">
+          <Tabs
+            items={[
+              { value: 'voice', label: 'Voice' },
+              { value: 'text', label: 'Text' },
+            ]}
+            value={mode}
+            onValueChange={(v) => setMode(v as Mode)}
+          />
+          {/* One-click delete-everything privacy control (Task 37, R16.7). */}
+          <PrivacyControls />
+        </div>
       </header>
 
       <DegradedBanner health={health} />

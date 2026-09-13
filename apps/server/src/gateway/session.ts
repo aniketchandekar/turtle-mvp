@@ -8,6 +8,7 @@ import {
   type ServerMessage,
   type TurnContract,
 } from '@turtle/shared';
+import { isRecapCard } from '../orchestrator/recap.js';
 import type {
   AsrStream,
   GatewayDeps,
@@ -364,6 +365,11 @@ export class SessionChannel implements SessionChannelHandle {
     // and REST plane see the same rows the voice path wrote, and stamp the persisted
     // id back onto the contract card so the forwarded turn_contract carries an id the
     // client can reference in a `card_action` tap (voice parity, R16.8).
+    //
+    // On a CLOSING turn the recap composer (Task 32) emits a recap card; we capture its
+    // persisted id here so `close()` can wire it to `session.recap_card_id`, persisting
+    // the recap as the session's long-term artifact (R14.3).
+    let recapCardId: string | undefined;
     for (const card of contract.cards) {
       const record = repos.card.create({
         session_id: sessionId,
@@ -373,6 +379,7 @@ export class SessionChannel implements SessionChannelHandle {
         action: card.action ?? null,
       });
       card.id = record.id;
+      if (contract.state === 'CLOSING' && isRecapCard(card)) recapCardId = record.id;
     }
 
     // Memory ops (R6.5). append_log writes a log entry when a patient is on file;
@@ -386,9 +393,10 @@ export class SessionChannel implements SessionChannelHandle {
       // service (Task 19) wires that. Left as a seam rather than guessing.
     }
 
-    // If the contract closes the session, record the end time (R2.6/R14).
+    // If the contract closes the session, record the end time and wire the recap card
+    // as the session's long-term artifact when one was emitted (R2.6/R7.5/R14.3).
     if (contract.state === 'CLOSING') {
-      repos.session.close(sessionId);
+      repos.session.close(sessionId, recapCardId);
     }
   }
 

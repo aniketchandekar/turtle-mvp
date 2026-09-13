@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import type {
   Appointment,
   Caregiver,
+  CaregiverPrefs,
   CardRecord,
   KbChunk,
   LogEntry,
@@ -60,6 +61,18 @@ export function createRepositories(db: DB, cipher: Cipher) {
       },
       setConsent(cid: string, at = now()): void {
         db.prepare(`UPDATE caregiver SET consent_at = ? WHERE id = ?`).run(at, cid);
+      },
+      /**
+       * Merge new preference values (voice id, pace, check-in time) into the caregiver
+       * prefs JSON, preserving any keys not supplied. Backs onboarding (Task 33, R16.10):
+       * "pick check-in time and voice preferences". Unknown caregiver id is a no-op.
+       */
+      updatePrefs(cid: string, patch: Partial<CaregiverPrefs>): Caregiver | null {
+        const existing = this.get(cid);
+        if (!existing) return null;
+        const prefs = { ...existing.prefs, ...patch };
+        db.prepare(`UPDATE caregiver SET prefs = ? WHERE id = ?`).run(j(prefs), cid);
+        return { ...existing, prefs };
       },
     },
 
@@ -268,6 +281,51 @@ export function createRepositories(db: DB, cipher: Cipher) {
           recap_card_id: r.recap_card_id ?? null,
         })) as Session[];
       },
+      /**
+       * List EVERY session (newest-started first). Backs the lightweight metrics
+       * aggregation (Task 36, design.md §Observability): sessions/day is counted from
+       * `started_at`, and refusal/crisis counts read each session's accumulated `flags`.
+       * Owner-scoped in a later multi-user build; single-user MVP returns them all.
+       */
+      listAll(): Session[] {
+        const rows = db
+          .prepare(`SELECT * FROM session ORDER BY started_at DESC, rowid DESC`)
+          .all() as Record<string, string>[];
+        return rows.map((r) => ({
+          id: r.id,
+          caregiver_id: r.caregiver_id,
+          started_at: r.started_at,
+          ended_at: r.ended_at ?? null,
+          mode_transitions: p(r.mode_transitions, []),
+          flags: p(r.flags, []),
+          recap_card_id: r.recap_card_id ?? null,
+        })) as Session[];
+      },
+      /**
+       * List sessions that carry AT LEAST ONE owner-review flag (crisis or
+       * medical_refusal), newest-started first. Backs the owner review view for flagged
+       * transcripts (Task 36, R5.5): a session is surfaced for review when any turn in
+       * it was flagged — the flag is accumulated on the session by {@link addFlag}.
+       * The empty-JSON-array literal `'[]'` is the unflagged default, so any session
+       * whose `flags` differs from it has been flagged.
+       */
+      listFlagged(): Session[] {
+        const rows = db
+          .prepare(
+            `SELECT * FROM session WHERE flags IS NOT NULL AND flags != '[]'
+             ORDER BY started_at DESC, rowid DESC`,
+          )
+          .all() as Record<string, string>[];
+        return rows.map((r) => ({
+          id: r.id,
+          caregiver_id: r.caregiver_id,
+          started_at: r.started_at,
+          ended_at: r.ended_at ?? null,
+          mode_transitions: p(r.mode_transitions, []),
+          flags: p(r.flags, []),
+          recap_card_id: r.recap_card_id ?? null,
+        })) as Session[];
+      },
       appendTransition(sid: string, mode: string): void {
         const s = this.get(sid);
         if (!s) return;
@@ -321,6 +379,29 @@ export function createRepositories(db: DB, cipher: Cipher) {
         const rows = db
           .prepare(`SELECT * FROM turn WHERE session_id = ? ORDER BY seq ASC`)
           .all(sid) as Record<string, string | number>[];
+        return rows.map((r) => ({
+          id: r.id as string,
+          session_id: r.session_id as string,
+          seq: r.seq as number,
+          speaker: r.speaker as Turn['speaker'],
+          text: cipher.decrypt(r.text as string) ?? '',
+          asr_conf: (r.asr_conf as number) ?? null,
+          retrieved_chunk_ids: p(r.retrieved_chunk_ids as string, []),
+          flag: (r.flag as string) ?? null,
+          latency_ms: (r.latency_ms as number) ?? null,
+        }));
+      },
+      /**
+       * List EVERY turn across all sessions (session, then seq order). Backs the
+       * lightweight metrics aggregation (Task 36, design.md §Observability): latency
+       * percentiles read each turn's `latency_ms`, the grounded-answer rate reads each
+       * assistant turn's `retrieved_chunk_ids`, and refusal/crisis counts read `flag`.
+       * Single-user MVP returns the whole set; scope by owner in a multi-user build.
+       */
+      listAll(): Turn[] {
+        const rows = db
+          .prepare(`SELECT * FROM turn ORDER BY session_id ASC, seq ASC`)
+          .all() as Record<string, string | number>[];
         return rows.map((r) => ({
           id: r.id as string,
           session_id: r.session_id as string,
