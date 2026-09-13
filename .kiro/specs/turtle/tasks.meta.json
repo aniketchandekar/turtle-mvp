@@ -1,0 +1,491 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1. Initialize the monorepo and shared types": [
+      {
+        "executionId": "da0a2682-933d-4903-9dd4-769878ab1cc4",
+        "chatSessionId": "sess_31c685a1-fbd7-4eeb-8734-8e18e117751b",
+        "timestamp": 1789256924984
+      },
+      {
+        "executionId": "da0a2682-933d-4903-9dd4-769878ab1cc4",
+        "chatSessionId": "sess_31c685a1-fbd7-4eeb-8734-8e18e117751b",
+        "timestamp": 1789257047262
+      }
+    ],
+    "2. Define shared contract and message types in `packages/shared`": [
+      {
+        "executionId": "afe8bd2b-d848-4ad8-a9f1-1f9b4d2cf88f",
+        "chatSessionId": "sess_6ca4c159-fc0a-4906-b656-bdd6a6b2a6cd",
+        "timestamp": 1789257063274
+      },
+      {
+        "executionId": "afe8bd2b-d848-4ad8-a9f1-1f9b4d2cf88f",
+        "chatSessionId": "sess_6ca4c159-fc0a-4906-b656-bdd6a6b2a6cd",
+        "timestamp": 1789257223467
+      }
+    ],
+    "3. Build the configuration and degradation layer": [
+      {
+        "executionId": "0d94deeb-b933-47e9-adc3-c02c1d1264cb",
+        "chatSessionId": "sess_eccfd075-0416-4d6d-846c-71f39acfefbf",
+        "timestamp": 1789257245591
+      },
+      {
+        "executionId": "0d94deeb-b933-47e9-adc3-c02c1d1264cb",
+        "chatSessionId": "sess_eccfd075-0416-4d6d-846c-71f39acfefbf",
+        "timestamp": 1789257591854
+      }
+    ],
+    "4. Implement the SQLite store and schema": [
+      {
+        "executionId": "8ef455a0-7f4a-447d-8136-a65b31a15874",
+        "chatSessionId": "sess_e6990f52-2a21-400d-9646-f027e0b683ef",
+        "timestamp": 1789257618130
+      },
+      {
+        "executionId": "8ef455a0-7f4a-447d-8136-a65b31a15874",
+        "chatSessionId": "sess_e6990f52-2a21-400d-9646-f027e0b683ef",
+        "timestamp": 1789257861784
+      }
+    ],
+    "5. Build the client shell (Next.js)": [
+      {
+        "executionId": "3355a3b6-3936-4be2-8c73-4b879f31203b",
+        "chatSessionId": "sess_78a7dab3-20c3-4e75-9a04-a79aa23f1244",
+        "timestamp": 1789257913772
+      },
+      {
+        "executionId": "3355a3b6-3936-4be2-8c73-4b879f31203b",
+        "chatSessionId": "sess_78a7dab3-20c3-4e75-9a04-a79aa23f1244",
+        "timestamp": 1789258054222
+      }
+    ],
+    "6. Stand up the backend service and health endpoint": [
+      {
+        "executionId": "697176e3-6672-4fbc-aaa3-1ab89cf9ecf1",
+        "chatSessionId": "sess_36eb5ec2-e5da-48fc-8cbf-b36df6540457",
+        "timestamp": 1789259955522
+      },
+      {
+        "executionId": "697176e3-6672-4fbc-aaa3-1ab89cf9ecf1",
+        "chatSessionId": "sess_36eb5ec2-e5da-48fc-8cbf-b36df6540457",
+        "timestamp": 1789260304422
+      }
+    ],
+    "7. Implement the WebSocket session channel": [
+      {
+        "executionId": "753ea66f-ac58-42a1-b070-2009ffc2232b",
+        "chatSessionId": "sess_f2509352-168d-47f0-8e5c-a86ca089a3e9",
+        "timestamp": 1789260398140
+      },
+      {
+        "executionId": "753ea66f-ac58-42a1-b070-2009ffc2232b",
+        "chatSessionId": "sess_f2509352-168d-47f0-8e5c-a86ca089a3e9",
+        "timestamp": 1789260888174
+      }
+    ],
+    "8. Implement client audio capture and playback": [
+      {
+        "executionId": "f467bdb0-26cb-41ff-a152-6f8213b3f2fe",
+        "chatSessionId": "sess_e223f504-3e55-4300-b3d9-8827c4b07750",
+        "timestamp": 1789260907340
+      },
+      {
+        "executionId": "f467bdb0-26cb-41ff-a152-6f8213b3f2fe",
+        "chatSessionId": "sess_e223f504-3e55-4300-b3d9-8827c4b07750",
+        "timestamp": 1789261433801
+      }
+    ],
+    "9. Integrate streaming ASR (Deepgram)": [
+      {
+        "executionId": "8d3357e9-7ea6-4238-a4ea-9b63c27bcc21",
+        "chatSessionId": "sess_1fa3b021-4f09-4208-adfb-13e7b9591543",
+        "timestamp": 1789261466170
+      },
+      {
+        "executionId": "8d3357e9-7ea6-4238-a4ea-9b63c27bcc21",
+        "chatSessionId": "sess_1fa3b021-4f09-4208-adfb-13e7b9591543",
+        "timestamp": 1789262863151
+      }
+    ],
+    "10. Integrate streaming TTS (ElevenLabs)": [
+      {
+        "executionId": "1c859f29-6372-492c-9924-8a61f1dee8ed",
+        "chatSessionId": "sess_1dce2b33-ff44-4689-a0bf-7ad6a93a9b9b",
+        "timestamp": 1789262940581
+      },
+      {
+        "executionId": "1c859f29-6372-492c-9924-8a61f1dee8ed",
+        "chatSessionId": "sess_1dce2b33-ff44-4689-a0bf-7ad6a93a9b9b",
+        "timestamp": 1789263454274
+      }
+    ],
+    "11. Implement the conversation state machine": [
+      {
+        "executionId": "059f23aa-d81b-496d-8566-e947bc174c4b",
+        "chatSessionId": "sess_2cf97d94-9b9b-4dc5-9976-5ca3fb5544d8",
+        "timestamp": 1789263474098
+      },
+      {
+        "executionId": "059f23aa-d81b-496d-8566-e947bc174c4b",
+        "chatSessionId": "sess_2cf97d94-9b9b-4dc5-9976-5ca3fb5544d8",
+        "timestamp": 1789264045642
+      }
+    ],
+    "12. Implement barge-in": [
+      {
+        "executionId": "9e64c136-3cfc-4e12-8185-68bba32cb26a",
+        "chatSessionId": "sess_4dc1ab1a-c485-46df-b80c-0649a92d6e9c",
+        "timestamp": 1789264256659
+      },
+      {
+        "executionId": "9e64c136-3cfc-4e12-8185-68bba32cb26a",
+        "chatSessionId": "sess_4dc1ab1a-c485-46df-b80c-0649a92d6e9c",
+        "timestamp": 1789264682810
+      }
+    ],
+    "13. Add per-turn latency instrumentation": [
+      {
+        "executionId": "f9a85ab0-a29b-4d7e-9348-21c280617b53",
+        "chatSessionId": "sess_e373e6c6-4974-4f7f-b1b7-8ad1ff3ed4f4",
+        "timestamp": 1789264872195
+      },
+      {
+        "executionId": "f9a85ab0-a29b-4d7e-9348-21c280617b53",
+        "chatSessionId": "sess_e373e6c6-4974-4f7f-b1b7-8ad1ff3ed4f4",
+        "timestamp": 1789265354091
+      }
+    ],
+    "14. Implement the LLM provider adapter": [
+      {
+        "executionId": "f83715be-653d-4027-a6c8-b8bd87c17857",
+        "chatSessionId": "sess_49a9cd44-4752-4195-af00-7d61fda4db13",
+        "timestamp": 1789265543279
+      },
+      {
+        "executionId": "f83715be-653d-4027-a6c8-b8bd87c17857",
+        "chatSessionId": "sess_49a9cd44-4752-4195-af00-7d61fda4db13",
+        "timestamp": 1789265757429
+      }
+    ],
+    "15. Implement contract validation and repair": [
+      {
+        "executionId": "f58235f2-710a-48c6-9776-bdb84112b8f5",
+        "chatSessionId": "sess_05da5920-b06a-476e-80bd-ca652d3b7660",
+        "timestamp": 1789265822517
+      },
+      {
+        "executionId": "f58235f2-710a-48c6-9776-bdb84112b8f5",
+        "chatSessionId": "sess_05da5920-b06a-476e-80bd-ca652d3b7660",
+        "timestamp": 1789266029406
+      },
+      {
+        "executionId": "5ac70b21-70fb-40c1-b144-5d4119e3a5ab",
+        "chatSessionId": "sess_09669de4-f2b4-4171-9134-9fa5c45aa017",
+        "timestamp": 1789266318948
+      }
+    ],
+    "16. Implement the safety classifier (seed)": [
+      {
+        "executionId": "5ac70b21-70fb-40c1-b144-5d4119e3a5ab",
+        "chatSessionId": "sess_09669de4-f2b4-4171-9134-9fa5c45aa017",
+        "timestamp": 1789266318989
+      }
+    ],
+    "17. Implement the medical guardrail refusal composer": [
+      {
+        "executionId": "5ac70b21-70fb-40c1-b144-5d4119e3a5ab",
+        "chatSessionId": "sess_09669de4-f2b4-4171-9134-9fa5c45aa017",
+        "timestamp": 1789266319053
+      },
+      {
+        "executionId": "2cfd5b41-67ed-4412-82cb-0d1d4aea253e",
+        "chatSessionId": "sess_d4b8d8c4-079e-4ea8-a152-d52d3b714f84",
+        "timestamp": 1789266791759
+      },
+      {
+        "executionId": "2cfd5b41-67ed-4412-82cb-0d1d4aea253e",
+        "chatSessionId": "sess_d4b8d8c4-079e-4ea8-a152-d52d3b714f84",
+        "timestamp": 1789267089877
+      }
+    ],
+    "18. Implement the mode router": [
+      {
+        "executionId": "5ac70b21-70fb-40c1-b144-5d4119e3a5ab",
+        "chatSessionId": "sess_09669de4-f2b4-4171-9134-9fa5c45aa017",
+        "timestamp": 1789266319084
+      },
+      {
+        "executionId": "f3fd01b9-85af-4152-9439-7e77f7c2d949",
+        "chatSessionId": "sess_d5abedcd-80d0-4834-86d8-6cadb381b380",
+        "timestamp": 1789267115986
+      },
+      {
+        "executionId": "f3fd01b9-85af-4152-9439-7e77f7c2d949",
+        "chatSessionId": "sess_d5abedcd-80d0-4834-86d8-6cadb381b380",
+        "timestamp": 1789267733464
+      }
+    ],
+    "19. Implement the memory & context assembly service": [
+      {
+        "executionId": "5ac70b21-70fb-40c1-b144-5d4119e3a5ab",
+        "chatSessionId": "sess_09669de4-f2b4-4171-9134-9fa5c45aa017",
+        "timestamp": 1789266319107
+      },
+      {
+        "executionId": "04778859-d1fd-44cc-8880-903c7af9b171",
+        "chatSessionId": "sess_3f3fe179-abbd-4c0d-8931-7fdaf511ad07",
+        "timestamp": 1789267758427
+      },
+      {
+        "executionId": "04778859-d1fd-44cc-8880-903c7af9b171",
+        "chatSessionId": "sess_3f3fe179-abbd-4c0d-8931-7fdaf511ad07",
+        "timestamp": 1789267995574
+      }
+    ],
+    "20. Implement the check-in mode": [
+      {
+        "executionId": "5ac70b21-70fb-40c1-b144-5d4119e3a5ab",
+        "chatSessionId": "sess_09669de4-f2b4-4171-9134-9fa5c45aa017",
+        "timestamp": 1789266319138
+      },
+      {
+        "executionId": "d8e3ca10-ec89-4629-b8ee-c364727e053f",
+        "chatSessionId": "sess_7525865b-88d9-41a4-98e8-69e0ca43b926",
+        "timestamp": 1789268711045
+      },
+      {
+        "executionId": "d8e3ca10-ec89-4629-b8ee-c364727e053f",
+        "chatSessionId": "sess_7525865b-88d9-41a4-98e8-69e0ca43b926",
+        "timestamp": 1789268979320
+      }
+    ],
+    "21. Build the RAG subsystem": [
+      {
+        "executionId": "5ac70b21-70fb-40c1-b144-5d4119e3a5ab",
+        "chatSessionId": "sess_09669de4-f2b4-4171-9134-9fa5c45aa017",
+        "timestamp": 1789266319165
+      },
+      {
+        "executionId": "2a24785a-2e11-4350-9059-ac1eeefb0212",
+        "chatSessionId": "sess_9b72d8f2-8e8f-4f21-ae99-74f91bd18b30",
+        "timestamp": 1789269054339
+      },
+      {
+        "executionId": "2a24785a-2e11-4350-9059-ac1eeefb0212",
+        "chatSessionId": "sess_9b72d8f2-8e8f-4f21-ae99-74f91bd18b30",
+        "timestamp": 1789269977418
+      }
+    ],
+    "22. Implement the Q&A mode with grounding": [
+      {
+        "executionId": "5ac70b21-70fb-40c1-b144-5d4119e3a5ab",
+        "chatSessionId": "sess_09669de4-f2b4-4171-9134-9fa5c45aa017",
+        "timestamp": 1789266319186
+      },
+      {
+        "executionId": "c4054dca-ee87-48d9-aab5-0eef0812d061",
+        "chatSessionId": "sess_6708944e-304b-4bee-ac88-3ac4953e0447",
+        "timestamp": 1789269994853
+      },
+      {
+        "executionId": "c4054dca-ee87-48d9-aab5-0eef0812d061",
+        "chatSessionId": "sess_6708944e-304b-4bee-ac88-3ac4953e0447",
+        "timestamp": 1789270477017
+      }
+    ],
+    "23. Implement the card service and lifecycle": [
+      {
+        "executionId": "5ac70b21-70fb-40c1-b144-5d4119e3a5ab",
+        "chatSessionId": "sess_09669de4-f2b4-4171-9134-9fa5c45aa017",
+        "timestamp": 1789266319213
+      },
+      {
+        "executionId": "87137ccb-0f03-47ad-b9a2-a9b9c47ce39f",
+        "chatSessionId": "sess_9bffbb7e-116f-4a1a-892e-d03b3e6ba921",
+        "timestamp": 1789270536635
+      },
+      {
+        "executionId": "87137ccb-0f03-47ad-b9a2-a9b9c47ce39f",
+        "chatSessionId": "sess_9bffbb7e-116f-4a1a-892e-d03b3e6ba921",
+        "timestamp": 1789270863467
+      }
+    ],
+    "24. Implement the client card surface": [
+      {
+        "executionId": "5ac70b21-70fb-40c1-b144-5d4119e3a5ab",
+        "chatSessionId": "sess_09669de4-f2b4-4171-9134-9fa5c45aa017",
+        "timestamp": 1789266319244
+      },
+      {
+        "executionId": "4741b029-b889-4585-a018-08d25432fc7e",
+        "chatSessionId": "sess_11cc1f24-7d08-4b9c-9884-ecbad8daeb24",
+        "timestamp": 1789271011561
+      },
+      {
+        "executionId": "4741b029-b889-4585-a018-08d25432fc7e",
+        "chatSessionId": "sess_11cc1f24-7d08-4b9c-9884-ecbad8daeb24",
+        "timestamp": 1789271411850
+      }
+    ],
+    "25. Add a card taxonomy unit test": [
+      {
+        "executionId": "5ac70b21-70fb-40c1-b144-5d4119e3a5ab",
+        "chatSessionId": "sess_09669de4-f2b4-4171-9134-9fa5c45aa017",
+        "timestamp": 1789266319286
+      },
+      {
+        "executionId": "71f4fc8e-ce39-4323-b996-dc629030d420",
+        "chatSessionId": "sess_1572f080-1037-4a8a-83e8-856ecf75d215",
+        "timestamp": 1789271460132
+      },
+      {
+        "executionId": "71f4fc8e-ce39-4323-b996-dc629030d420",
+        "chatSessionId": "sess_1572f080-1037-4a8a-83e8-856ecf75d215",
+        "timestamp": 1789271572516
+      }
+    ],
+    "26. Implement the care log extraction mode": [
+      {
+        "executionId": "5ac70b21-70fb-40c1-b144-5d4119e3a5ab",
+        "chatSessionId": "sess_09669de4-f2b4-4171-9134-9fa5c45aa017",
+        "timestamp": 1789266319307
+      },
+      {
+        "executionId": "1c278a53-ea07-4fff-b43b-a2b18c9e3d81",
+        "chatSessionId": "sess_b5423d0f-1e99-4931-b45e-d08b68ac1d38",
+        "timestamp": 1789271592921
+      },
+      {
+        "executionId": "1c278a53-ea07-4fff-b43b-a2b18c9e3d81",
+        "chatSessionId": "sess_b5423d0f-1e99-4931-b45e-d08b68ac1d38",
+        "timestamp": 1789271852644
+      }
+    ],
+    "27. Implement care log voice retrieval": [
+      {
+        "executionId": "5ac70b21-70fb-40c1-b144-5d4119e3a5ab",
+        "chatSessionId": "sess_09669de4-f2b4-4171-9134-9fa5c45aa017",
+        "timestamp": 1789266319360
+      },
+      {
+        "executionId": "de8b0f45-a17e-42a4-be5d-bd38bc92359e",
+        "chatSessionId": "sess_2e5d3a07-42cb-469e-b591-396da603391d",
+        "timestamp": 1789272876218
+      },
+      {
+        "executionId": "de8b0f45-a17e-42a4-be5d-bd38bc92359e",
+        "chatSessionId": "sess_2e5d3a07-42cb-469e-b591-396da603391d",
+        "timestamp": 1789273313665
+      }
+    ],
+    "28. Implement appointment management": [
+      {
+        "executionId": "5ac70b21-70fb-40c1-b144-5d4119e3a5ab",
+        "chatSessionId": "sess_09669de4-f2b4-4171-9134-9fa5c45aa017",
+        "timestamp": 1789266319385
+      },
+      {
+        "executionId": "c182aa4e-4dac-4cbb-9084-d3e942f7a35e",
+        "chatSessionId": "sess_4db968d7-b884-47fc-a215-8dd6441382ec",
+        "timestamp": 1789273375212
+      },
+      {
+        "executionId": "c182aa4e-4dac-4cbb-9084-d3e942f7a35e",
+        "chatSessionId": "sess_4db968d7-b884-47fc-a215-8dd6441382ec",
+        "timestamp": 1789273929035
+      }
+    ],
+    "29. Implement appointment prep briefing": [
+      {
+        "executionId": "5ac70b21-70fb-40c1-b144-5d4119e3a5ab",
+        "chatSessionId": "sess_09669de4-f2b4-4171-9134-9fa5c45aa017",
+        "timestamp": 1789266319419
+      },
+      {
+        "executionId": "e71f9b59-1d53-4979-b732-e63e6c2af9aa",
+        "chatSessionId": "sess_fad0c88c-a7c9-4a4e-9ccc-0ac1b022c060",
+        "timestamp": 1789273945572
+      },
+      {
+        "executionId": "e71f9b59-1d53-4979-b732-e63e6c2af9aa",
+        "chatSessionId": "sess_fad0c88c-a7c9-4a4e-9ccc-0ac1b022c060",
+        "timestamp": 1789274370652
+      }
+    ],
+    "30. Implement visit summary and prep/summary retrieval": [
+      {
+        "executionId": "5ac70b21-70fb-40c1-b144-5d4119e3a5ab",
+        "chatSessionId": "sess_09669de4-f2b4-4171-9134-9fa5c45aa017",
+        "timestamp": 1789266319455
+      },
+      {
+        "executionId": "61e73f67-bc86-4b2c-89fd-5dadda8a22bc",
+        "chatSessionId": "sess_689d4bbe-7843-452f-b300-e6a5c9db1338",
+        "timestamp": 1789274385765
+      },
+      {
+        "executionId": "61e73f67-bc86-4b2c-89fd-5dadda8a22bc",
+        "chatSessionId": "sess_689d4bbe-7843-452f-b300-e6a5c9db1338",
+        "timestamp": 1789275151244
+      }
+    ],
+    "31. Implement the crisis protocol end-to-end": [
+      {
+        "executionId": "5ac70b21-70fb-40c1-b144-5d4119e3a5ab",
+        "chatSessionId": "sess_09669de4-f2b4-4171-9134-9fa5c45aa017",
+        "timestamp": 1789266319483
+      }
+    ],
+    "32. Implement recap and session close": [
+      {
+        "executionId": "5ac70b21-70fb-40c1-b144-5d4119e3a5ab",
+        "chatSessionId": "sess_09669de4-f2b4-4171-9134-9fa5c45aa017",
+        "timestamp": 1789266319511
+      }
+    ],
+    "33. Implement onboarding, consent, and AI disclosure": [
+      {
+        "executionId": "5ac70b21-70fb-40c1-b144-5d4119e3a5ab",
+        "chatSessionId": "sess_09669de4-f2b4-4171-9134-9fa5c45aa017",
+        "timestamp": 1789266319543
+      }
+    ],
+    "34. Build the full guardrail eval harness": [
+      {
+        "executionId": "5ac70b21-70fb-40c1-b144-5d4119e3a5ab",
+        "chatSessionId": "sess_09669de4-f2b4-4171-9134-9fa5c45aa017",
+        "timestamp": 1789266319566
+      }
+    ],
+    "35. Expand the Q&A grounding eval": [
+      {
+        "executionId": "5ac70b21-70fb-40c1-b144-5d4119e3a5ab",
+        "chatSessionId": "sess_09669de4-f2b4-4171-9134-9fa5c45aa017",
+        "timestamp": 1789266319595
+      }
+    ],
+    "36. Implement observability and metrics": [
+      {
+        "executionId": "5ac70b21-70fb-40c1-b144-5d4119e3a5ab",
+        "chatSessionId": "sess_09669de4-f2b4-4171-9134-9fa5c45aa017",
+        "timestamp": 1789266319624
+      }
+    ],
+    "37. Implement privacy controls and audio retention policy": [
+      {
+        "executionId": "5ac70b21-70fb-40c1-b144-5d4119e3a5ab",
+        "chatSessionId": "sess_09669de4-f2b4-4171-9134-9fa5c45aa017",
+        "timestamp": 1789266319653
+      }
+    ],
+    "38. Write end-to-end tests and polish": [
+      {
+        "executionId": "5ac70b21-70fb-40c1-b144-5d4119e3a5ab",
+        "chatSessionId": "sess_09669de4-f2b4-4171-9134-9fa5c45aa017",
+        "timestamp": 1789266319703
+      }
+    ]
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "name": "turtle",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Turtle — voice-first caregiver companion (MVP)",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "dev": "concurrently -n server,web -c cyan,magenta \"npm run dev -w @turtle/server\" \"npm run dev -w @turtle/web\"",
+    "dev:server": "npm run dev -w @turtle/server",
+    "dev:web": "npm run dev -w @turtle/web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write .",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@typescript-eslint/eslint-plugin": "^8.18.0",
+    "@typescript-eslint/parser": "^8.18.0",
+    "concurrently": "^9.1.0",
+    "eslint": "^8.57.1",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

@@ -1,0 +1,141 @@
+@import 'tailwindcss';
+
+/*
+ * Turtle design system. Guided by ui-ux-pro-max: calming teal/cyan palette, soft-UI
+ * (neumorphic) depth applied selectively, and Atkinson Hyperlegible for accessibility.
+ * Dark-first (Turtle's calm night palette), with text contrast kept >= 4.5:1.
+ */
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --radius: 1rem;
+
+  /* Light (fallback) — calm cyan + soft neutrals */
+  --background: oklch(0.98 0.01 210);
+  --foreground: oklch(0.30 0.04 235);
+
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.30 0.04 235);
+
+  --primary: oklch(0.62 0.09 210);
+  --primary-foreground: oklch(0.99 0.01 210);
+
+  --secondary: oklch(0.93 0.02 210);
+  --secondary-foreground: oklch(0.30 0.04 235);
+
+  --muted: oklch(0.95 0.01 210);
+  --muted-foreground: oklch(0.48 0.03 235);
+
+  --accent: oklch(0.70 0.12 175); /* healing green */
+  --accent-foreground: oklch(0.20 0.04 175);
+
+  --destructive: oklch(0.60 0.20 25);
+  --destructive-foreground: oklch(0.99 0 0);
+
+  --border: oklch(0.90 0.02 210);
+  --input: oklch(0.90 0.02 210);
+  --ring: oklch(0.62 0.09 210);
+
+  /* Soft-UI shadows (neumorphic). Tuned per theme. */
+  --soft-shadow: 6px 6px 16px rgba(0, 0, 0, 0.06), -6px -6px 16px rgba(255, 255, 255, 0.7);
+  --soft-inset: inset 3px 3px 8px rgba(0, 0, 0, 0.06), inset -3px -3px 8px rgba(255, 255, 255, 0.7);
+}
+
+/* Turtle ships dark-first: calm, low-glare night palette (2am-friendly). */
+.dark {
+  --background: oklch(0.20 0.02 235);
+  --foreground: oklch(0.94 0.01 210);
+
+  --card: oklch(0.24 0.025 235);
+  --card-foreground: oklch(0.94 0.01 210);
+
+  --primary: oklch(0.72 0.10 200);
+  --primary-foreground: oklch(0.16 0.03 235);
+
+  --secondary: oklch(0.28 0.025 235);
+  --secondary-foreground: oklch(0.94 0.01 210);
+
+  --muted: oklch(0.28 0.02 235);
+  --muted-foreground: oklch(0.74 0.02 210);
+
+  --accent: oklch(0.70 0.11 175);
+  --accent-foreground: oklch(0.16 0.03 175);
+
+  --destructive: oklch(0.64 0.19 25);
+  --destructive-foreground: oklch(0.98 0 0);
+
+  --border: oklch(0.32 0.025 235);
+  --input: oklch(0.32 0.025 235);
+  --ring: oklch(0.72 0.10 200);
+
+  /* Dark soft-UI: light source top-left, shadow bottom-right, subtle. */
+  --soft-shadow: 6px 6px 16px rgba(0, 0, 0, 0.35), -6px -6px 16px rgba(255, 255, 255, 0.03);
+  --soft-inset: inset 3px 3px 8px rgba(0, 0, 0, 0.35), inset -3px -3px 8px rgba(255, 255, 255, 0.03);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 6px);
+  --radius-md: calc(var(--radius) - 3px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 6px);
+  --font-sans:
+    'Atkinson Hyperlegible', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+* {
+  border-color: var(--border);
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  background: var(--background);
+  color: var(--foreground);
+  font-family:
+    'Atkinson Hyperlegible', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 18px; /* readable base type */
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Soft-UI utility classes (neumorphic depth, applied selectively). */
+.soft {
+  box-shadow: var(--soft-shadow);
+}
+.soft-inset {
+  box-shadow: var(--soft-inset);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+:focus-visible {
+  outline: 3px solid var(--ring);
+  outline-offset: 3px;
+}

@@ -1,0 +1,23 @@
+node_modules/
+dist/
+build/
+.next/
+out/
+coverage/
+*.log
+.DS_Store
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Data (local store + audio artifacts)
+*.sqlite
+*.sqlite-journal
+data/
+
+# Cache and build artifacts
+__pycache__/
+*.py[cod]
+*.tsbuildinfo
