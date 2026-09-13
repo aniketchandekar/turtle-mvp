@@ -26,14 +26,7 @@ function toAgentState(state: AssistantState, capturing: boolean): AgentState {
 }
 
 /**
- * Turtle client shell. Voice is the medium; the ElevenLabs orb + waveform are the voice
- * surface. A Voice / Text tab switch exposes a typed conversation for accessibility and
- * as the ASR-down fallback. Calm, composed, single-surface — no feed, no badges.
- *
- * The live voice pipeline is wired here: a single per-session WebSocket streams captured
- * 16 kHz PCM up while push-to-talk is held (turn_end on release) and plays TTS PCM back
- * with a small buffer. Transcript, state, and the single card surface are driven by the
- * server contract (never inferred client-side).
+ * Turtle modern client shell.
  */
 export default function Home() {
   const health = useHealth();
@@ -42,7 +35,6 @@ export default function Home() {
   const [lines, setLines] = useState<TranscriptLine[]>([]);
   const [card, setCard] = useState<Card | null>(null);
   const seq = useRef(0);
-  // The id of the current dimmed interim user line, so successive interims update in place.
   const interimIdRef = useRef<number | null>(null);
 
   const addLine = useCallback((line: Omit<TranscriptLine, 'id'>): number => {
@@ -80,18 +72,12 @@ export default function Home() {
     onTranscriptInterim: upsertInterim,
     onTranscriptFinal: commitFinal,
     onContract: (contract) => {
-      // The client renders `say` into the transcript immediately (contract-driven).
-      // The card is delivered separately via onCard, gated behind the utterance.
       if (contract.say) addLine({ speaker: 'assistant', text: contract.say, interim: false });
     },
     onCard: (next) => {
-      // Fired after the turn's spoken content finishes (R10.3/R16.2), or immediately
-      // for a text-only turn. `null` clears the surface, keeping no-card sessions mic +
-      // transcript only (R10.5) and enforcing at most one active card at a time.
       setCard(next);
     },
     onError: (_code, message, degraded) => {
-      // Surface degradation / connection notices honestly in the transcript.
       if (degraded) addLine({ speaker: 'system', text: message, interim: false });
     },
   });
@@ -117,10 +103,6 @@ export default function Home() {
     });
   }, [addLine]);
 
-  // First-run gate (Task 33, R16.10): the caregiver cannot start a session until they
-  // have seen the AI disclosure, created the minimal profile, and given explicit consent
-  // to recording/storage. Until then the app shows onboarding (or a calm connecting state
-  // while the status loads / the server is unreachable).
   if (!onboarding.complete) {
     if (onboarding.loading || onboarding.status === null) {
       return (
@@ -128,9 +110,12 @@ export default function Home() {
           className="mx-auto grid h-[100dvh] w-full max-w-2xl place-items-center px-5"
           aria-label="Turtle"
         >
-          <p className="text-muted-foreground" role="status">
-            Connecting to Turtle…
-          </p>
+          <div className="flex flex-col items-center gap-3 text-slate-400">
+            <div className="h-9 w-9 rounded-full border-2 border-teal-500/30 border-t-teal-400 animate-spin" />
+            <p className="text-sm font-medium" role="status">
+              Connecting to Turtle…
+            </p>
+          </div>
         </main>
       );
     }
@@ -146,20 +131,28 @@ export default function Home() {
 
   return (
     <main
-      className="mx-auto flex h-[100dvh] w-full max-w-2xl flex-col px-5 py-4 sm:px-6"
+      className="mx-auto flex h-[100dvh] w-full max-w-2xl flex-col px-4 py-4 sm:px-6 overflow-hidden"
       aria-label="Turtle"
     >
-      <header className="flex items-center justify-between pb-3">
+      {/* Sleek Floating Glass Header */}
+      <header className="flex items-center justify-between rounded-2xl glass-panel px-4 py-3 shadow-lg border border-white/10 shrink-0">
         <div className="flex items-center gap-2.5">
           <span
-            className="grid h-9 w-9 place-items-center rounded-full bg-card text-primary soft"
+            className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-teal-500 to-emerald-500 text-slate-950 shadow-md glow-primary font-bold"
             aria-hidden="true"
           >
             <TurtleGlyph />
           </span>
-          <span className="text-lg font-bold tracking-tight">Turtle</span>
+          <div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-base font-bold tracking-tight text-slate-100">Turtle</span>
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" title="Ready" />
+            </div>
+            <p className="text-[11px] text-slate-400 leading-none">Caregiver companion</p>
+          </div>
         </div>
-        <div className="flex items-center gap-1.5">
+
+        <div className="flex items-center gap-2">
           <Tabs
             items={[
               { value: 'voice', label: 'Voice' },
@@ -168,59 +161,59 @@ export default function Home() {
             value={mode}
             onValueChange={(v) => setMode(v as Mode)}
           />
-          {/* One-click delete-everything privacy control (Task 37, R16.7). */}
           <PrivacyControls />
         </div>
       </header>
 
-      <DegradedBanner health={health} />
+      <div className="mt-3 shrink-0">
+        <DegradedBanner health={health} />
+      </div>
 
-      {mode === 'voice' ? (
-        <VoiceView
-          agentState={agentState}
-          listening={session.capturing}
-          micError={session.micError}
-          onPressStart={session.pressStart}
-          onPressEnd={session.pressEnd}
+      {/* Main Viewport Container */}
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+        {mode === 'voice' ? (
+          <VoiceView
+            agentState={agentState}
+            listening={session.capturing}
+            micError={session.micError}
+            onPressStart={session.pressStart}
+            onPressEnd={session.pressEnd}
+          />
+        ) : (
+          <TextView lines={lines} onSend={onSendText} />
+        )}
+      </div>
+
+      {/* Floating Card Surface for actions/notes/emergency */}
+      <div className="shrink-0">
+        <CardSurface
+          card={card}
+          onAction={(cardId, kind) => {
+            session.sendCardAction(cardId, kind);
+            setCard(null);
+          }}
+          onDismiss={(cardId) => {
+            session.sendCardAction(cardId, 'acknowledge');
+            setCard(null);
+          }}
         />
-      ) : (
-        <TextView lines={lines} onSend={onSendText} />
-      )}
-
-      <CardSurface
-        card={card}
-        onAction={(cardId, kind) => {
-          // Voice parity (R16.8): the tap emits card_action; clear the surface locally.
-          session.sendCardAction(cardId, kind);
-          setCard(null);
-        }}
-        onDismiss={(cardId) => {
-          session.sendCardAction(cardId, 'acknowledge');
-          setCard(null);
-        }}
-      />
+      </div>
     </main>
   );
 }
 
-/** Minimal turtle mark — a calm rounded shell. No emoji (per design guidelines). */
+/** Bespoke Turtle logo mark */
 function TurtleGlyph() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true" className="text-slate-950">
       <path
-        d="M12 6c-3.6 0-6.5 2.5-6.5 5.6 0 2.4 1.8 4 4 4.4"
+        d="M12 4C7.5 4 4 7.5 4 12c0 2.5 1.2 4.8 3 6.2M12 4c4.5 0 8 3.5 8 8 0 2.5-1.2 4.8-3 6.2"
         stroke="currentColor"
-        strokeWidth="1.8"
+        strokeWidth="2.2"
         strokeLinecap="round"
       />
-      <path
-        d="M12 6c3.6 0 6.5 2.5 6.5 5.6 0 2.4-1.8 4-4 4.4"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-      />
-      <path d="M9 18l-1 2M15 18l1 2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <circle cx="12" cy="11" r="2.2" fill="currentColor" />
+      <circle cx="12" cy="12" r="3" fill="currentColor" />
+      <path d="M7 19l-1 2M17 19l1 2M12 20v2" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
     </svg>
   );
 }

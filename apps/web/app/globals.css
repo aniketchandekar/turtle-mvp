@@ -1,9 +1,10 @@
 @import 'tailwindcss';
 
 /*
- * Turtle design system. Guided by ui-ux-pro-max: calming teal/cyan palette, soft-UI
- * (neumorphic) depth applied selectively, and Atkinson Hyperlegible for accessibility.
- * Dark-first (Turtle's calm night palette), with text contrast kept >= 4.5:1.
+ * Turtle Design System.
+ * Deep, calming night atmosphere (2am-friendly for tired caregivers),
+ * sleek glassmorphism, glowing ambient lighting, crisp typography (Atkinson Hyperlegible),
+ * and high contrast (WCAG AAA/AA compliant).
  */
 
 @custom-variant dark (&:where(.dark, .dark *));
@@ -11,67 +12,57 @@
 :root {
   --radius: 1rem;
 
-  /* Light (fallback) — calm cyan + soft neutrals */
-  --background: oklch(0.98 0.01 210);
-  --foreground: oklch(0.30 0.04 235);
+  /* Deep Calming Midnight Palette */
+  --background: oklch(0.12 0.02 245);
+  --foreground: oklch(0.96 0.01 210);
 
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.30 0.04 235);
+  --card: oklch(0.16 0.025 240 / 0.75);
+  --card-foreground: oklch(0.96 0.01 210);
 
-  --primary: oklch(0.62 0.09 210);
-  --primary-foreground: oklch(0.99 0.01 210);
+  --primary: oklch(0.74 0.14 185); /* Radiant Calming Teal */
+  --primary-foreground: oklch(0.12 0.03 245);
 
-  --secondary: oklch(0.93 0.02 210);
-  --secondary-foreground: oklch(0.30 0.04 235);
-
-  --muted: oklch(0.95 0.01 210);
-  --muted-foreground: oklch(0.48 0.03 235);
-
-  --accent: oklch(0.70 0.12 175); /* healing green */
-  --accent-foreground: oklch(0.20 0.04 175);
-
-  --destructive: oklch(0.60 0.20 25);
-  --destructive-foreground: oklch(0.99 0 0);
-
-  --border: oklch(0.90 0.02 210);
-  --input: oklch(0.90 0.02 210);
-  --ring: oklch(0.62 0.09 210);
-
-  /* Soft-UI shadows (neumorphic). Tuned per theme. */
-  --soft-shadow: 6px 6px 16px rgba(0, 0, 0, 0.06), -6px -6px 16px rgba(255, 255, 255, 0.7);
-  --soft-inset: inset 3px 3px 8px rgba(0, 0, 0, 0.06), inset -3px -3px 8px rgba(255, 255, 255, 0.7);
-}
-
-/* Turtle ships dark-first: calm, low-glare night palette (2am-friendly). */
-.dark {
-  --background: oklch(0.20 0.02 235);
-  --foreground: oklch(0.94 0.01 210);
-
-  --card: oklch(0.24 0.025 235);
-  --card-foreground: oklch(0.94 0.01 210);
-
-  --primary: oklch(0.72 0.10 200);
-  --primary-foreground: oklch(0.16 0.03 235);
-
-  --secondary: oklch(0.28 0.025 235);
+  --secondary: oklch(0.22 0.03 240 / 0.8);
   --secondary-foreground: oklch(0.94 0.01 210);
 
-  --muted: oklch(0.28 0.02 235);
-  --muted-foreground: oklch(0.74 0.02 210);
+  --muted: oklch(0.20 0.02 240 / 0.6);
+  --muted-foreground: oklch(0.72 0.03 220);
 
-  --accent: oklch(0.70 0.11 175);
-  --accent-foreground: oklch(0.16 0.03 175);
+  --accent: oklch(0.76 0.15 160); /* Healing Mint Green */
+  --accent-foreground: oklch(0.12 0.03 245);
 
-  --destructive: oklch(0.64 0.19 25);
-  --destructive-foreground: oklch(0.98 0 0);
+  --destructive: oklch(0.65 0.22 25);
+  --destructive-foreground: oklch(0.99 0 0);
 
-  --border: oklch(0.32 0.025 235);
-  --input: oklch(0.32 0.025 235);
-  --ring: oklch(0.72 0.10 200);
+  --border: oklch(0.28 0.03 240 / 0.4);
+  --input: oklch(0.18 0.025 240 / 0.6);
+  --ring: oklch(0.74 0.14 185);
 
-  /* Dark soft-UI: light source top-left, shadow bottom-right, subtle. */
-  --soft-shadow: 6px 6px 16px rgba(0, 0, 0, 0.35), -6px -6px 16px rgba(255, 255, 255, 0.03);
-  --soft-inset: inset 3px 3px 8px rgba(0, 0, 0, 0.35), inset -3px -3px 8px rgba(255, 255, 255, 0.03);
+  /* Modern Ambient Lighting & Glows */
+  --glow-primary: 0 0 35px -5px rgba(20, 184, 166, 0.35);
+  --glow-accent: 0 0 35px -5px rgba(16, 185, 129, 0.35);
+  --glow-destructive: 0 0 35px -5px rgba(239, 68, 68, 0.4);
+  --glass-shadow: 0 16px 40px -10px rgba(0, 0, 0, 0.5), 0 0 1px 1px rgba(255, 255, 255, 0.08) inset;
+}
+
+.dark {
+  --background: oklch(0.12 0.02 245);
+  --foreground: oklch(0.96 0.01 210);
+  --card: oklch(0.16 0.025 240 / 0.75);
+  --card-foreground: oklch(0.96 0.01 210);
+  --primary: oklch(0.74 0.14 185);
+  --primary-foreground: oklch(0.12 0.03 245);
+  --secondary: oklch(0.22 0.03 240 / 0.8);
+  --secondary-foreground: oklch(0.94 0.01 210);
+  --muted: oklch(0.20 0.02 240 / 0.6);
+  --muted-foreground: oklch(0.72 0.03 220);
+  --accent: oklch(0.76 0.15 160);
+  --accent-foreground: oklch(0.12 0.03 245);
+  --destructive: oklch(0.65 0.22 25);
+  --destructive-foreground: oklch(0.99 0 0);
+  --border: oklch(0.28 0.03 240 / 0.4);
+  --input: oklch(0.18 0.025 240 / 0.6);
+  --ring: oklch(0.74 0.14 185);
 }
 
 @theme inline {
@@ -96,8 +87,7 @@
   --radius-md: calc(var(--radius) - 3px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 6px);
-  --font-sans:
-    'Atkinson Hyperlegible', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-sans: 'Atkinson Hyperlegible', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 * {
@@ -109,23 +99,97 @@ body {
   margin: 0;
   padding: 0;
   min-height: 100%;
-  background: var(--background);
+  background-color: #090c15;
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(13, 148, 136, 0.12) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(6, 182, 212, 0.08) 0px, transparent 50%),
+    radial-gradient(at 50% 100%, rgba(15, 23, 42, 0.8) 0px, transparent 50%);
+  background-attachment: fixed;
   color: var(--foreground);
-  font-family:
-    'Atkinson Hyperlegible', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  font-size: 18px; /* readable base type */
+  font-family: 'Atkinson Hyperlegible', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 16px;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
 }
 
-/* Soft-UI utility classes (neumorphic depth, applied selectively). */
-.soft {
-  box-shadow: var(--soft-shadow);
-}
-.soft-inset {
-  box-shadow: var(--soft-inset);
+/* Glassmorphic Surfaces */
+.glass-panel {
+  background: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: var(--glass-shadow);
 }
 
+.glass-card {
+  background: rgba(20, 30, 52, 0.65);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-pill {
+  background: rgba(30, 41, 59, 0.6);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-input {
+  background: rgba(10, 15, 28, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #f1f5f9;
+}
+.glass-input:focus {
+  border-color: rgba(45, 212, 191, 0.5);
+  box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.15);
+}
+
+/* Radiant Glow Effects */
+.glow-primary {
+  box-shadow: var(--glow-primary);
+}
+.glow-accent {
+  box-shadow: var(--glow-accent);
+}
+.glow-destructive {
+  box-shadow: var(--glow-destructive);
+}
+
+/* Ambient Pulse Breathing Animation */
+@keyframes ambient-breathe {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 0.85;
+  }
+}
+
+.animate-ambient-breathe {
+  animation: ambient-breathe 6s ease-in-out infinite;
+}
+
+@keyframes ripple-wave {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+.animate-ripple {
+  animation: ripple-wave 2s cubic-bezier(0, 0.2, 0.8, 1) infinite;
+}
+
+/* Accessibility */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -136,6 +200,6 @@ body {
 }
 
 :focus-visible {
-  outline: 3px solid var(--ring);
-  outline-offset: 3px;
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }

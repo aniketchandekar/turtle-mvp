@@ -2,33 +2,20 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useDeleteEverything } from '@/lib/useDeleteEverything';
+import { ShieldAlert, Trash2, X, AlertTriangle } from 'lucide-react';
 
 /**
- * One-click "delete everything" privacy control (Task 37, R16.7).
- *
- * A quiet text button in the header opens a small confirmation dialog; confirming calls
- * DELETE /everything, which wipes every stored record (sessions, transcripts, cards, log
- * entries, patient profile, appointments, contacts). Deletion is irreversible, so the
- * destructive action is always behind an explicit confirm step — never a single stray tap.
- *
- * After a successful wipe the page reloads so the app returns to the first-run onboarding
- * + consent flow with a clean store (no stale session or profile lingering in memory).
- *
- * Accessibility: the confirm sheet is a labelled `role="dialog"`; the (non-destructive)
- * Cancel button takes focus on open so a stray Enter does not delete; Escape cancels;
- * large tap targets and readable type throughout.
+ * Modern Privacy Controls with glass dialog for data deletion.
  */
 export function PrivacyControls() {
   const [confirming, setConfirming] = useState(false);
   const { deleting, done, error, deleteEverything } = useDeleteEverything();
   const cancelRef = useRef<HTMLButtonElement | null>(null);
 
-  // Focus the safe (Cancel) control when the confirm sheet opens.
   useEffect(() => {
     if (confirming) cancelRef.current?.focus();
   }, [confirming]);
 
-  // On a successful wipe, reload so onboarding + consent restart against a clean store.
   useEffect(() => {
     if (done) window.location.reload();
   }, [done]);
@@ -42,14 +29,16 @@ export function PrivacyControls() {
       <button
         type="button"
         onClick={() => setConfirming(true)}
-        className="rounded-full px-2.5 py-1 text-sm font-medium text-muted-foreground transition-colors duration-200 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        aria-label="Privacy and data controls"
+        className="flex items-center gap-1.5 rounded-full glass-pill px-2.5 py-1 text-xs font-medium text-slate-400 transition-all duration-200 hover:text-rose-400 hover:border-rose-500/30 hover:bg-rose-950/20 cursor-pointer"
       >
-        Delete my data
+        <ShieldAlert className="h-3.5 w-3.5" />
+        <span className="hidden sm:inline">Privacy</span>
       </button>
 
       {confirming && (
         <div
-          className="fixed inset-0 z-50 grid place-items-center bg-black/30 px-5"
+          className="fixed inset-0 z-50 grid place-items-center bg-slate-950/70 backdrop-blur-md px-5"
           onClick={() => !deleting && setConfirming(false)}
         >
           <div
@@ -64,18 +53,31 @@ export function PrivacyControls() {
                 setConfirming(false);
               }
             }}
-            className="w-full max-w-md rounded-2xl bg-card p-5 soft"
+            className="w-full max-w-md rounded-2xl glass-panel p-6 shadow-2xl border border-rose-500/20"
           >
-            <h2 id="delete-title" className="m-0 mb-2 text-lg font-bold">
-              Delete everything?
-            </h2>
-            <p id="delete-body" className="m-0 mb-4 text-muted-foreground">
-              This permanently erases all of your conversations, notes, appointments, and
-              contacts from this device. It cannot be undone.
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                  <AlertTriangle className="h-5 w-5" />
+                </span>
+                <h2 id="delete-title" className="m-0 text-lg font-bold text-slate-100">
+                  Delete everything?
+                </h2>
+              </div>
+              <button
+                onClick={() => !deleting && setConfirming(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <p id="delete-body" className="m-0 mb-5 text-sm text-slate-300 leading-relaxed">
+              This permanently wipes all recorded conversations, care logs, appointments, contacts, and personal preferences from this device. This action cannot be undone.
             </p>
 
             {error && (
-              <p className="m-0 mb-3 text-sm text-destructive" role="alert">
+              <p className="m-0 mb-4 rounded-lg bg-rose-950/50 border border-rose-500/30 p-2.5 text-xs text-rose-300" role="alert">
                 {error}
               </p>
             )}
@@ -86,7 +88,7 @@ export function PrivacyControls() {
                 type="button"
                 onClick={() => setConfirming(false)}
                 disabled={deleting}
-                className="h-11 rounded-xl bg-card px-4 font-bold text-foreground soft transition-all duration-200 hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:hover:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="h-10 rounded-xl glass-pill px-4 text-xs font-semibold text-slate-300 transition-all hover:bg-white/10 hover:text-white active:scale-95 disabled:opacity-50 cursor-pointer"
               >
                 Cancel
               </button>
@@ -95,9 +97,10 @@ export function PrivacyControls() {
                 onClick={onConfirm}
                 disabled={deleting}
                 aria-label="Confirm delete everything"
-                className="h-11 rounded-xl bg-destructive px-4 font-bold text-destructive-foreground soft transition-all duration-200 hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:hover:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="flex items-center gap-1.5 h-10 rounded-xl bg-rose-600 px-4 text-xs font-bold text-white shadow-md glow-destructive transition-all hover:bg-rose-500 active:scale-95 disabled:opacity-50 cursor-pointer"
               >
-                {deleting ? 'Deleting…' : 'Delete everything'}
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>{deleting ? 'Deleting…' : 'Erase All Data'}</span>
               </button>
             </div>
           </div>

@@ -3,46 +3,33 @@
 import { useEffect, useRef } from 'react';
 import type { Card, CardActionKind } from '@turtle/shared';
 import { cn } from '@/lib/utils';
+import { 
+  AlertTriangle, 
+  Calendar, 
+  Phone, 
+  ExternalLink, 
+  Share2, 
+  Check, 
+  X,
+  FileText 
+} from 'lucide-react';
 
 interface Props {
   /** The single active card, or null when nothing should show (max one active). */
   card: Card | null;
-  /**
-   * A card action was tapped. Voice parity (R16.8): this emits `card_action` up the
-   * socket; the equivalent spoken replies (okay/done/dismiss/call) flow through the
-   * normal turn pipeline instead. Receives the persisted card id and the action kind.
-   */
+  /** A card action was tapped. */
   onAction?: (cardId: string, kind: CardActionKind) => void;
-  /**
-   * The card was dismissed by tap (the "Okay/Dismiss" control). Emits an `acknowledge`
-   * card_action for the server lifecycle and clears the local surface.
-   */
+  /** The card was dismissed. */
   onDismiss?: (cardId: string) => void;
 }
 
 /**
- * The single card surface (Task 24, R10.1/R10.2/R10.3/R10.5/R16.2/R16.8).
- *
- * A bottom-sheet overlay that renders AT MOST one card, and only the card the server
- * contract emits (never inferred client-side). The parent gates rendering behind the
- * spoken utterance — this component is handed a card only once its speech has finished
- * (R10.3/R16.2) — so it simply presents what it is given. When `card` is null it
- * renders nothing, leaving no-card sessions as mic + transcript only (R10.5).
- *
- * Anatomy (R10.2): title, ≤3-line body, and at most one action button plus a dismiss.
- * Both the tap actions here and the spoken okay/done/dismiss/call have parity (R16.8):
- * taps send `card_action`; voice goes through the turn pipeline.
- *
- * Accessibility: the sheet is a labelled `role="dialog"` with a heading; the primary
- * action gets focus on appearance; Escape dismisses. Large tap targets (≥44px) and
- * readable type throughout.
+ * Modern floating glass CardSurface for Actionable, Safety, and Retained cards.
  */
 export function CardSurface({ card, onAction, onDismiss }: Props) {
   const actionRef = useRef<HTMLButtonElement | null>(null);
   const dismissRef = useRef<HTMLButtonElement | null>(null);
 
-  // Move focus onto the card when it appears so a keyboard/screen-reader user lands on
-  // it. Prefer the primary action; fall back to dismiss when there is no action.
   useEffect(() => {
     if (!card) return;
     (actionRef.current ?? dismissRef.current)?.focus();
@@ -50,9 +37,6 @@ export function CardSurface({ card, onAction, onDismiss }: Props) {
 
   if (!card) return null;
 
-  // Contract cards forwarded by the gateway carry the persisted id (voice parity).
-  // Absent an id we still render (never inferred behavior), but taps can't be routed,
-  // so the action buttons are inert rather than sending an unresolvable card_action.
   const cardId = card.id ?? null;
 
   const dismiss = () => {
@@ -62,6 +46,10 @@ export function CardSurface({ card, onAction, onDismiss }: Props) {
   const runAction = () => {
     if (cardId && card.action) onAction?.(cardId, card.action.kind);
   };
+
+  const isSafety = card.type === 'safety';
+  const isActionable = card.type === 'actionable';
+  const isRetained = card.type === 'retained';
 
   return (
     <aside
@@ -76,20 +64,55 @@ export function CardSurface({ card, onAction, onDismiss }: Props) {
         }
       }}
       className={cn(
-        'mt-3 rounded-2xl border-l-4 bg-card p-4 soft',
-        card.type === 'safety' && 'border-l-destructive',
-        card.type === 'actionable' && 'border-l-primary',
-        card.type === 'retained' && 'border-l-accent',
+        'mt-4 rounded-2xl glass-panel p-5 shadow-2xl transition-all duration-300 border-t-2',
+        isSafety && 'border-t-rose-500 bg-rose-950/40 glow-destructive',
+        isActionable && 'border-t-teal-400 bg-slate-900/80 glow-primary',
+        isRetained && 'border-t-emerald-400 bg-slate-900/80 glow-accent',
       )}
     >
-      <h2 id="card-title" className="m-0 mb-1.5 text-lg font-bold">
-        {card.title}
-      </h2>
-      {/* ≤3-line body (R10.2): clamp so long bodies never grow the sheet. */}
-      <p id="card-body" className="m-0 mb-3 line-clamp-3 text-muted-foreground">
+      <div className="flex items-start justify-between gap-3 mb-2">
+        <div className="flex items-center gap-2">
+          <span
+            className={cn(
+              'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs font-bold shadow-sm',
+              isSafety && 'bg-rose-500/20 text-rose-300 border border-rose-500/30',
+              isActionable && 'bg-teal-500/20 text-teal-300 border border-teal-500/30',
+              isRetained && 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30',
+            )}
+          >
+            {isSafety && <AlertTriangle className="h-4 w-4" />}
+            {isActionable && <Calendar className="h-4 w-4" />}
+            {isRetained && <FileText className="h-4 w-4" />}
+          </span>
+          <h2 id="card-title" className="m-0 text-base font-bold text-slate-100">
+            {card.title}
+          </h2>
+        </div>
+
+        <button
+          onClick={dismiss}
+          aria-label={`Dismiss ${card.title}`}
+          className="text-slate-400 hover:text-slate-100 p-1 rounded-lg hover:bg-white/10 transition-colors"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <p id="card-body" className="m-0 mb-4 line-clamp-3 text-sm text-slate-300 leading-relaxed pl-9">
         {card.body}
       </p>
-      <div className="flex gap-2.5">
+
+      <div className="flex justify-end gap-2.5 pt-1">
+        <button
+          ref={dismissRef}
+          type="button"
+          onClick={dismiss}
+          disabled={!cardId}
+          className="h-9 rounded-xl glass-pill px-4 text-xs font-semibold text-slate-300 transition-all duration-200 hover:text-white hover:bg-white/10 active:scale-95 disabled:opacity-50"
+        >
+          Dismiss
+        </button>
+
         {card.action && (
           <button
             ref={actionRef}
@@ -97,42 +120,50 @@ export function CardSurface({ card, onAction, onDismiss }: Props) {
             onClick={runAction}
             disabled={!cardId}
             aria-label={actionAriaLabel(card.action.kind, card.title)}
-            className="h-11 rounded-xl bg-primary px-4 font-bold text-primary-foreground soft transition-all duration-200 hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:hover:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className={cn(
+              'flex items-center gap-1.5 h-9 rounded-xl px-4 text-xs font-bold transition-all duration-200 shadow-md active:scale-95 disabled:opacity-50',
+              isSafety
+                ? 'bg-rose-600 hover:bg-rose-500 text-white'
+                : 'bg-gradient-to-r from-teal-500 to-emerald-500 text-slate-950 hover:opacity-95',
+            )}
           >
-            {actionLabel(card.action.kind)}
+            {renderActionIcon(card.action.kind)}
+            <span>{actionLabel(card.action.kind)}</span>
           </button>
         )}
-        <button
-          ref={dismissRef}
-          type="button"
-          onClick={dismiss}
-          disabled={!cardId}
-          aria-label={`Dismiss ${card.title}`}
-          className="h-11 rounded-xl bg-card px-4 text-foreground soft transition-all duration-200 hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:hover:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          Dismiss
-        </button>
       </div>
     </aside>
   );
 }
 
-/** Visible label for the single action button, by action kind. */
-function actionLabel(kind: CardActionKind): string {
+function renderActionIcon(kind: CardActionKind) {
   switch (kind) {
     case 'call':
-      return 'Call';
+      return <Phone className="h-3.5 w-3.5" />;
     case 'link':
-      return 'Open';
+      return <ExternalLink className="h-3.5 w-3.5" />;
     case 'share':
-      return 'Share';
+      return <Share2 className="h-3.5 w-3.5" />;
     case 'acknowledge':
     default:
-      return 'Okay';
+      return <Check className="h-3.5 w-3.5" />;
   }
 }
 
-/** Descriptive accessible name that pairs the action with the card it acts on. */
+function actionLabel(kind: CardActionKind): string {
+  switch (kind) {
+    case 'call':
+      return 'Call Now';
+    case 'link':
+      return 'Open';
+    case 'share':
+      return 'Share Link';
+    case 'acknowledge':
+    default:
+      return 'Got it';
+  }
+}
+
 function actionAriaLabel(kind: CardActionKind, title: string): string {
   switch (kind) {
     case 'call':
@@ -143,6 +174,6 @@ function actionAriaLabel(kind: CardActionKind, title: string): string {
       return `Share — ${title}`;
     case 'acknowledge':
     default:
-      return `Okay — ${title}`;
+      return `Got it — ${title}`;
   }
 }

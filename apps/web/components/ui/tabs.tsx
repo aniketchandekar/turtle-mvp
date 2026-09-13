@@ -1,10 +1,12 @@
 'use client';
 
 import { cn } from '@/lib/utils';
+import { Mic, MessageSquare } from 'lucide-react';
 
 export interface TabItem {
   value: string;
   label: string;
+  icon?: 'voice' | 'text';
 }
 
 interface TabsProps {
@@ -15,15 +17,14 @@ interface TabsProps {
 }
 
 /**
- * A calm segmented tab switch (soft-UI). The track is gently recessed; the active tab is
- * a raised soft pill. Keyboard: arrow keys move between tabs.
+ * Modern segmented glass tab switcher.
  */
 export function Tabs({ items, value, onValueChange, className }: TabsProps) {
   return (
     <div
       role="tablist"
       aria-label="Conversation mode"
-      className={cn('inline-flex gap-1 rounded-full bg-card p-1 soft-inset', className)}
+      className={cn('inline-flex items-center gap-1 rounded-full glass-pill p-1 shadow-inner', className)}
     >
       {items.map((item, index) => {
         const selected = item.value === value;
@@ -43,13 +44,15 @@ export function Tabs({ items, value, onValueChange, className }: TabsProps) {
               }
             }}
             className={cn(
-              'min-w-20 rounded-full px-4 py-1.5 text-sm font-bold transition-all duration-200',
+              'flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold tracking-wide transition-all duration-200',
               selected
-                ? 'bg-primary text-primary-foreground soft'
-                : 'text-muted-foreground hover:text-foreground',
+                ? 'bg-gradient-to-r from-teal-500 to-emerald-500 text-slate-950 shadow-md glow-primary font-bold'
+                : 'text-slate-400 hover:text-slate-100 hover:bg-white/5',
             )}
           >
-            {item.label}
+            {item.value === 'voice' && <Mic className="h-3.5 w-3.5" />}
+            {item.value === 'text' && <MessageSquare className="h-3.5 w-3.5" />}
+            <span>{item.label}</span>
           </button>
         );
       })}
