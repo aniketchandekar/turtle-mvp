@@ -35,8 +35,5 @@ ENV NODE_ENV=production \
 
 EXPOSE 8787
 
-# Volume mount point for persistent SQLite database
-VOLUME ["/app/apps/server/data"]
-
 # Start backend server
 CMD ["npm", "run", "start", "-w", "@turtle/server"]
