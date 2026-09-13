@@ -24,7 +24,7 @@ interface Props {
 }
 
 /**
- * Modern floating glass CardSurface for Actionable, Safety, and Retained cards.
+ * ElevenLabs-style minimalist CardSurface for Actionable, Safety, and Retained cards.
  */
 export function CardSurface({ card, onAction, onDismiss }: Props) {
   const actionRef = useRef<HTMLButtonElement | null>(null);
@@ -64,27 +64,25 @@ export function CardSurface({ card, onAction, onDismiss }: Props) {
         }
       }}
       className={cn(
-        'mt-4 rounded-2xl glass-panel p-5 shadow-2xl transition-all duration-300 border-t-2',
-        isSafety && 'border-t-rose-500 bg-rose-950/40 glow-destructive',
-        isActionable && 'border-t-teal-400 bg-slate-900/80 glow-primary',
-        isRetained && 'border-t-emerald-400 bg-slate-900/80 glow-accent',
+        'mt-3 rounded-2xl bg-[#121215] border border-zinc-800 p-4 shadow-xl transition-all duration-200 text-white',
+        isSafety && 'border-rose-800/80 bg-[#160c0e]',
       )}
     >
       <div className="flex items-start justify-between gap-3 mb-2">
         <div className="flex items-center gap-2">
           <span
             className={cn(
-              'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs font-bold shadow-sm',
-              isSafety && 'bg-rose-500/20 text-rose-300 border border-rose-500/30',
-              isActionable && 'bg-teal-500/20 text-teal-300 border border-teal-500/30',
-              isRetained && 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30',
+              'flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-xs font-bold',
+              isSafety && 'bg-rose-500/20 text-rose-400',
+              isActionable && 'bg-zinc-800 text-zinc-300',
+              isRetained && 'bg-zinc-800 text-zinc-300',
             )}
           >
-            {isSafety && <AlertTriangle className="h-4 w-4" />}
-            {isActionable && <Calendar className="h-4 w-4" />}
-            {isRetained && <FileText className="h-4 w-4" />}
+            {isSafety && <AlertTriangle className="h-3.5 w-3.5" />}
+            {isActionable && <Calendar className="h-3.5 w-3.5" />}
+            {isRetained && <FileText className="h-3.5 w-3.5" />}
           </span>
-          <h2 id="card-title" className="m-0 text-base font-bold text-slate-100">
+          <h2 id="card-title" className="m-0 text-sm font-semibold text-white">
             {card.title}
           </h2>
         </div>
@@ -92,23 +90,23 @@ export function CardSurface({ card, onAction, onDismiss }: Props) {
         <button
           onClick={dismiss}
           aria-label={`Dismiss ${card.title}`}
-          className="text-slate-400 hover:text-slate-100 p-1 rounded-lg hover:bg-white/10 transition-colors"
+          className="text-zinc-500 hover:text-white p-1 rounded-md hover:bg-zinc-800 transition-colors"
         >
-          <X className="h-4 w-4" />
+          <X className="h-3.5 w-3.5" />
         </button>
       </div>
 
-      <p id="card-body" className="m-0 mb-4 line-clamp-3 text-sm text-slate-300 leading-relaxed pl-9">
+      <p id="card-body" className="m-0 mb-3 text-xs text-zinc-400 leading-relaxed pl-8">
         {card.body}
       </p>
 
-      <div className="flex justify-end gap-2.5 pt-1">
+      <div className="flex justify-end gap-2 pt-1">
         <button
           ref={dismissRef}
           type="button"
           onClick={dismiss}
           disabled={!cardId}
-          className="h-9 rounded-xl glass-pill px-4 text-xs font-semibold text-slate-300 transition-all duration-200 hover:text-white hover:bg-white/10 active:scale-95 disabled:opacity-50"
+          className="h-8 rounded-lg bg-zinc-900 border border-zinc-800 px-3 text-xs font-medium text-zinc-400 transition-colors hover:text-white hover:bg-zinc-800 active:scale-95 disabled:opacity-50 cursor-pointer"
         >
           Dismiss
         </button>
@@ -121,10 +119,10 @@ export function CardSurface({ card, onAction, onDismiss }: Props) {
             disabled={!cardId}
             aria-label={actionAriaLabel(card.action.kind, card.title)}
             className={cn(
-              'flex items-center gap-1.5 h-9 rounded-xl px-4 text-xs font-bold transition-all duration-200 shadow-md active:scale-95 disabled:opacity-50',
+              'flex items-center gap-1.5 h-8 rounded-lg px-3.5 text-xs font-semibold transition-colors active:scale-95 disabled:opacity-50 cursor-pointer',
               isSafety
                 ? 'bg-rose-600 hover:bg-rose-500 text-white'
-                : 'bg-gradient-to-r from-teal-500 to-emerald-500 text-slate-950 hover:opacity-95',
+                : 'bg-white text-black hover:bg-zinc-200',
             )}
           >
             {renderActionIcon(card.action.kind)}
@@ -139,14 +137,14 @@ export function CardSurface({ card, onAction, onDismiss }: Props) {
 function renderActionIcon(kind: CardActionKind) {
   switch (kind) {
     case 'call':
-      return <Phone className="h-3.5 w-3.5" />;
+      return <Phone className="h-3 w-3" />;
     case 'link':
-      return <ExternalLink className="h-3.5 w-3.5" />;
+      return <ExternalLink className="h-3 w-3" />;
     case 'share':
-      return <Share2 className="h-3.5 w-3.5" />;
+      return <Share2 className="h-3 w-3" />;
     case 'acknowledge':
     default:
-      return <Check className="h-3.5 w-3.5" />;
+      return <Check className="h-3 w-3" />;
   }
 }
 

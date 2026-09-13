@@ -61,6 +61,7 @@ class FakeTtsStream implements TtsStream {
   speak(_say: string): void {
     if (this.closed) return;
     this.callbacks.onAudioChunk(Buffer.from([1, 2, 3, 4]));
+    this.callbacks.onTurnDone();
   }
   flush(): void {
     this.flushCount += 1;

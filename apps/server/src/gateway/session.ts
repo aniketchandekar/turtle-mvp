@@ -40,6 +40,8 @@ export class SessionChannel implements SessionChannelHandle {
   private closed = false;
   private asr: AsrStream | null = null;
   private tts: TtsStream | null = null;
+  /** Resolves the active TTS turn once ElevenLabs emits its final frame. */
+  private finishTtsTurn: (() => void) | null = null;
   /** True once a turn is in flight; used to discard partial responses on barge-in. */
   private currentTurnId: string | null = null;
   /**
@@ -231,7 +233,13 @@ export class SessionChannel implements SessionChannelHandle {
   private onInterrupt(): void {
     if (!this.requireSession()) return;
     this.forwardingAudio = false;
-    if (this.tts) this.tts.flush();
+    const tts = this.tts;
+    this.tts = null;
+    tts?.flush();
+    // Flushes intentionally do not produce ElevenLabs' final-frame event, so release
+    // a deliver() that is awaiting it. The closed audio gate prevents the abandoned
+    // contract from being forwarded.
+    this.finishTtsTurn?.();
     this.currentTurnId = null;
     // An interruption is not a latency sample: drop the in-flight turn's timer and
     // any pending end-of-speech mark so they don't contaminate the next turn.
@@ -319,11 +327,19 @@ export class SessionChannel implements SessionChannelHandle {
     }
 
     this.applyContractSideEffects(contract, sessionId, turnId);
-    await this.deliver(contract);
+    const delivery = await this.deliver(contract);
+
+    // An interrupt can land while TTS is streaming. In that case deliver() returns
+    // false so the abandoned turn never sends a stale contract or settles over the
+    // newer LISTENING state.
+    if (!delivery.delivered || this.closed || this.currentTurnId !== turnId) {
+      if (this.turnTimer === timer) this.turnTimer = null;
+      return;
+    }
 
     // Record the finished breakdown: persist the headline figure on the assistant
     // turn and emit the structured per-turn log (R15.4).
-    this.recordTurnLatency(timer, contract, sessionId, turnId);
+    this.recordTurnLatency(timer, contract, sessionId, turnId, !delivery.usedTts);
 
     this.currentTurnId = null;
     if (this.turnTimer === timer) this.turnTimer = null;
@@ -404,15 +420,23 @@ export class SessionChannel implements SessionChannelHandle {
    * Speak the contract's `say` (TTS when live, else text-only), then forward the
    * turn contract and settle the final state.
    */
-  private async deliver(contract: TurnContract): Promise<void> {
+  private async deliver(contract: TurnContract): Promise<{ delivered: boolean; usedTts: boolean }> {
     // SPEAKING while audio streams (R2.4). Text-only mode still transits SPEAKING so
     // the client renders the transcript consistently.
     this.setState('SPEAKING');
+    let usedTts = false;
 
+    // ElevenLabs closes each stream after the end-of-sequence frame, so prepare a
+    // fresh synthesizer for the next response when necessary.
+    if (!this.tts) this.openTtsIfLive();
     if (this.tts) {
+      usedTts = true;
       // Open the audio gate for this turn; a barge-in closes it again (onInterrupt).
       this.forwardingAudio = true;
       await this.speakViaTts(contract.say);
+      // A barge-in settles the pending TTS promise but must not allow this abandoned
+      // response's text, card, or state transition to reach the client.
+      if (!this.forwardingAudio) return { delivered: false, usedTts };
     }
     // else: text-only degradation — the `say` text is delivered via turn_contract
     // and rendered in the transcript (R4.5). No audio frames are sent.
@@ -433,16 +457,26 @@ export class SessionChannel implements SessionChannelHandle {
     } else {
       this.setState('WAITING');
     }
+    return { delivered: true, usedTts };
   }
 
   private speakViaTts(say: string): Promise<void> {
     return new Promise<void>((resolve) => {
       if (!this.tts) return resolve();
-      // The TTS seam forwards audio chunks to the client and signals turn done.
-      // The provider is opened with callbacks that push to this.send; here we just
-      // trigger synthesis and resolve when the turn completes.
-      this.tts.speak(say);
-      resolve();
+      // Keep the audio gate open until the provider's final frame. Resolving here
+      // used to close `forwardingAudio` before ElevenLabs had emitted its first
+      // asynchronous audio chunk, silently dropping all spoken output.
+      this.finishTtsTurn = () => {
+        this.finishTtsTurn = null;
+        resolve();
+      };
+      try {
+        this.tts.speak(say);
+      } catch {
+        // A provider failure degrades this turn to text rather than leaving the
+        // session stuck in SPEAKING.
+        this.finishTtsTurn();
+      }
     });
   }
 
@@ -476,7 +510,8 @@ export class SessionChannel implements SessionChannelHandle {
         }
       },
       onTurnDone: () => {
-        /* turn completion is handled by deliver() settling state */
+        this.finishTtsTurn?.();
+        this.tts = null;
       },
     });
   }
@@ -507,6 +542,7 @@ export class SessionChannel implements SessionChannelHandle {
     contract: TurnContract,
     sessionId: string,
     turnId: string,
+    textOnly: boolean,
   ): void {
     const breakdown = timer.breakdown();
     const { repos } = this.deps.store;
@@ -531,7 +567,7 @@ export class SessionChannel implements SessionChannelHandle {
       flags,
       modeTransitions,
       cardsEmitted: contract.cards.length,
-      textOnly: this.tts === null,
+      textOnly,
     });
   }
 

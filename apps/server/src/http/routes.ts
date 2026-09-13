@@ -224,6 +224,7 @@ export function createRoutes(cfg: Config, store: Store): Router {
       needsOnboarding: !(hasConsent && hasProfile),
       hasConsent,
       hasProfile,
+      patient: patient ?? null,
       consent_at: cg.consent_at,
       prefs: cg.prefs,
       // AI disclosure copy for the first-run introduction (served from shared constants).

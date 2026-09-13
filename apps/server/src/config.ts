@@ -1,6 +1,14 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { TTS_PRESET } from '@turtle/shared';
+
+// Workspace scripts run with `apps/server` as their working directory, while this
+// repository keeps its local configuration in the workspace-root `.env`. Resolve
+// from this file rather than `process.cwd()` so `npm run dev` and `npm run dev:server`
+// load the same values. Shell-provided environment variables still take precedence.
+const sourceDir = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(sourceDir, '../../../.env') });
 
 /**
  * Configuration + degradation layer.
@@ -108,6 +116,7 @@ export function loadConfig(source: EnvSource = process.env): Config {
 
   const deepgramKey = env('DEEPGRAM_API_KEY');
   const elevenKey = env('ELEVENLABS_API_KEY');
+  const elevenVoiceId = env('ELEVENLABS_VOICE_ID');
   const geminiKey = env('GEMINI_API_KEY');
   const anthropicKey = env('ANTHROPIC_API_KEY');
   const openaiKey = env('OPENAI_API_KEY');
@@ -160,8 +169,8 @@ export function loadConfig(source: EnvSource = process.env): Config {
       fallback: 'Deepgram key missing — using typed text input (text-in, voice-out).',
     },
     tts: {
-      live: Boolean(elevenKey),
-      fallback: 'ElevenLabs key missing — using text-only mode (response shown, not spoken).',
+      live: Boolean(elevenKey && elevenVoiceId),
+      fallback: 'ElevenLabs key or voice ID missing — using text-only mode (response shown, not spoken).',
     },
     llm: {
       live: llmProvider !== 'none',
@@ -186,7 +195,7 @@ export function loadConfig(source: EnvSource = process.env): Config {
       apiKey: elevenKey,
       // Frozen preset defaults live in packages/shared; env can override the id/format only.
       modelId: envOr('ELEVENLABS_MODEL_ID', TTS_PRESET.model_id),
-      voiceId: env('ELEVENLABS_VOICE_ID'),
+      voiceId: elevenVoiceId,
       outputFormat: envOr('ELEVENLABS_OUTPUT_FORMAT', TTS_PRESET.output_format),
       voiceSettings: TTS_PRESET.voice_settings,
       chunkLengthSchedule: TTS_PRESET.chunk_length_schedule,

@@ -35,6 +35,7 @@ const EMPTY: EnvSource = {};
 class FakeTtsStream implements TtsStream {
   flushedAt: number | null = null;
   flushCount = 0;
+  speakCount = 0;
   closed = false;
   constructor(private readonly callbacks: TtsCallbacks) {}
 
@@ -42,6 +43,7 @@ class FakeTtsStream implements TtsStream {
     // Emit one audio chunk to represent playback starting, then hold the turn open
     // (no onTurnDone) so the assistant stays in SPEAKING until interrupted.
     if (this.closed) return;
+    this.speakCount += 1;
     this.callbacks.onAudioChunk(Buffer.from([1, 2, 3, 4]));
   }
 
@@ -49,6 +51,12 @@ class FakeTtsStream implements TtsStream {
   emitAudio(): void {
     if (this.closed) return;
     this.callbacks.onAudioChunk(Buffer.from([9, 9, 9, 9]));
+  }
+
+  /** Complete the current synthesized turn when a test wants normal playback. */
+  finish(): void {
+    if (this.closed) return;
+    this.callbacks.onTurnDone();
   }
 
   flush(): void {
@@ -289,6 +297,7 @@ describe('Barge-in — never penalized, treated as the next turn (R4.4)', () => 
   it('records no flag for the interruption and accepts the next turn normally', async () => {
     harness = await makeHarness();
     const c = await driveToSpeaking(harness);
+    const stream = harness.tts.stream!;
 
     send(c.ws, { type: 'interrupt' });
     await waitFor(
@@ -306,6 +315,10 @@ describe('Barge-in — never penalized, treated as the next turn (R4.4)', () => 
     send(c.ws, { type: 'text_input', text: 'okay never mind, how are you' });
     await waitFor(() => harness!.processor.pending === 1, 1000, 'next turn in flight');
     harness.processor.release();
+    // This turn is allowed to finish normally; the first was intentionally held open
+    // so the interrupt could land mid-playback.
+    await waitFor(() => harness!.tts.stream !== stream, 1000, 'second turn TTS stream');
+    harness.tts.stream!.finish();
     await waitFor(
       () => c.messages.filter((m) => m.type === 'turn_contract').length > beforeContracts,
       1000,

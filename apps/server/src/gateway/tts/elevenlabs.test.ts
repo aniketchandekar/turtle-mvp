@@ -6,7 +6,6 @@ import {
   buildInitFrame,
   createElevenLabsTtsProvider,
   ELEVENLABS_EVENTS,
-  KEEPALIVE_FRAME,
   splitSentences,
   type ElevenLabsConnectOptions,
   type ElevenLabsConnection,
@@ -224,7 +223,7 @@ describe('ElevenLabs provider — streaming a turn (preset + flush + keepalive)'
     stream.speak('First sentence. Second sentence. Third and last.');
 
     const frames = textFrames(conn);
-    expect(frames).toHaveLength(3);
+    expect(frames).toHaveLength(4);
     expect((frames[0]!.text as string).trim()).toBe('First sentence.');
     expect((frames[1]!.text as string).trim()).toBe('Second sentence.');
     expect((frames[2]!.text as string).trim()).toBe('Third and last.');
@@ -232,6 +231,7 @@ describe('ElevenLabs provider — streaming a turn (preset + flush + keepalive)'
     expect(frames[0]!.flush).toBeUndefined();
     expect(frames[1]!.flush).toBeUndefined();
     expect(frames[2]!.flush).toBe(true);
+    expect(frames[3]).toEqual({ text: '' });
   });
 
   it('buffers frames until the socket opens, then flushes them in order (init first)', () => {
@@ -244,13 +244,14 @@ describe('ElevenLabs provider — streaming a turn (preset + flush + keepalive)'
     expect(conn.sent).toHaveLength(0);
 
     conn.emitOpen();
-    // Init frame first, then the single (final) sentence with flush.
+    // Init frame first, then the single (final) sentence with flush and EOS.
     expect(conn.sent[0]!.text).toBe(' ');
     expect(conn.sent[1]).toMatchObject({ flush: true });
     expect((conn.sent[1]!.text as string).trim()).toBe('Only one.');
+    expect(conn.sent[2]).toEqual({ text: '' });
   });
 
-  it('keeps the socket open between turns with the space keepalive (never empty string)', () => {
+  it('ends the sequence after a flushed turn so ElevenLabs emits the final frame', () => {
     const conn = new FakeElevenLabsConnection();
     const { callbacks } = collectingCallbacks();
     const provider = createElevenLabsTtsProvider(cfg, () => conn, vi.fn(async () => {}));
@@ -258,16 +259,16 @@ describe('ElevenLabs provider — streaming a turn (preset + flush + keepalive)'
     conn.emitOpen();
 
     stream.speak('A turn.');
-    // ElevenLabs signals end of generation with isFinal — that triggers keepalive.
+    // The explicit EOS frame follows the final flushed sentence.
+    expect(conn.sent).toContainEqual({ text: '' });
+    // ElevenLabs signals end of generation with isFinal.
     conn.emitAudio([1, 2, 3], { final: true });
 
-    // The keepalive frame is a single space, and the socket is NOT closed.
-    expect(conn.sent).toContainEqual(KEEPALIVE_FRAME);
-    expect(conn.sent.some((f) => f.text === '')).toBe(false);
+    expect(conn.sent.filter((f) => f.text === '')).toHaveLength(1);
     expect(conn.closeCount).toBe(0);
   });
 
-  it('flush() (barge-in / turn boundary) sends the space keepalive and holds the socket open', () => {
+  it('flush() (barge-in) closes the active stream immediately', () => {
     const conn = new FakeElevenLabsConnection();
     const provider = createElevenLabsTtsProvider(cfg, () => conn, vi.fn(async () => {}));
     const stream = provider.open(collectingCallbacks().callbacks) as TtsStream;
@@ -276,9 +277,7 @@ describe('ElevenLabs provider — streaming a turn (preset + flush + keepalive)'
     stream.speak('Interrupt me.');
     stream.flush();
 
-    expect(conn.sent).toContainEqual(KEEPALIVE_FRAME);
-    expect(conn.sent.some((f) => f.text === '')).toBe(false);
-    expect(conn.closeCount).toBe(0);
+    expect(conn.closeCount).toBe(1);
   });
 
   it('forwards received PCM audio chunks and signals turn done on isFinal', () => {

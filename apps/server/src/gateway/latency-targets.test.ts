@@ -82,10 +82,14 @@ class FakeTtsStream implements TtsStream {
   flushedAt: number | null = null;
   flushCount = 0;
   closed = false;
-  constructor(private readonly callbacks: TtsCallbacks) {}
+  constructor(
+    private readonly callbacks: TtsCallbacks,
+    private readonly autoComplete: boolean,
+  ) {}
   speak(_say: string): void {
     if (this.closed) return;
     this.callbacks.onAudioChunk(Buffer.from([1, 2, 3, 4]));
+    if (this.autoComplete) this.callbacks.onTurnDone();
   }
   flush(): void {
     this.flushCount += 1;
@@ -96,12 +100,12 @@ class FakeTtsStream implements TtsStream {
   }
 }
 
-function fakeTtsProvider(): TtsProvider & { stream: FakeTtsStream | null } {
+function fakeTtsProvider(autoComplete: boolean): TtsProvider & { stream: FakeTtsStream | null } {
   const provider = {
     live: true as const,
     stream: null as FakeTtsStream | null,
     open(callbacks: TtsCallbacks): TtsStream {
-      const s = new FakeTtsStream(callbacks);
+      const s = new FakeTtsStream(callbacks, autoComplete);
       provider.stream = s;
       return s;
     },
@@ -158,12 +162,12 @@ interface Harness {
  * `processor` argument lets a test use the real E2E orchestrator (batch timing) or a
  * controllable one (barge-in).
  */
-async function makeHarness(processor: TurnProcessor, stepMs = 120): Promise<Harness> {
+async function makeHarness(processor: TurnProcessor, stepMs = 120, autoCompleteTts = false): Promise<Harness> {
   const cfg = loadConfig(EMPTY);
   const store = createStore(':memory:', cfg.encryptionKey);
   const server = http.createServer();
   const wss = new WebSocketServer({ server, path: '/ws' });
-  const tts = fakeTtsProvider();
+  const tts = fakeTtsProvider(autoCompleteTts);
   const logs: number[] = [];
 
   let nowMs = 0;
@@ -245,7 +249,7 @@ afterEach(async () => {
 
 describe('R16.1 — end-to-end batch over the real gateway meets p50/p95', () => {
   it('runs many turns through the gateway and both percentiles are within budget', async () => {
-    harness = await makeHarness(createE2eProcessor());
+    harness = await makeHarness(createE2eProcessor(), 120, true);
     const s = harness.store.repos.session.create(harness.caregiverId);
     const c = connect(harness.url);
     await c.open;
@@ -321,7 +325,7 @@ describe('R16.2 — the card-bearing contract is forwarded promptly after the ut
     // `turn_contract` right after the spoken audio for the turn — is what the gateway
     // controls and what this test measures: the contract must reach the client promptly
     // so the client's 500ms render window starts on time.
-    harness = await makeHarness(createE2eProcessor());
+    harness = await makeHarness(createE2eProcessor(), 120, true);
     const s = harness.store.repos.session.create(harness.caregiverId);
     const c = connect(harness.url);
     await c.open;

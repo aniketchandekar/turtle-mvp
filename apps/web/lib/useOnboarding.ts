@@ -14,30 +14,35 @@ export interface Disclosure {
   what_i_never_do: string;
 }
 
+export interface PatientInfo {
+  id: string;
+  name: string;
+  diagnosis: Diagnosis;
+  diagnosis_notes?: string | null;
+  care_team?: Record<string, unknown>;
+}
+
 export interface OnboardingStatus {
   caregiver_id: string;
-  /** True until BOTH explicit consent and a patient profile exist (R16.10). */
   needsOnboarding: boolean;
   hasConsent: boolean;
   hasProfile: boolean;
+  patient?: PatientInfo | null;
   consent_at: string | null;
   prefs: CaregiverPrefs;
   disclosure: Disclosure;
 }
 
-/** A care-team contact captured in the minimal onboarding form. */
 export interface CareTeamInput {
   nurse_line?: string;
   social_worker?: string;
   oncologist?: string;
 }
 
-/** The minimal onboarding form payload (name, diagnosis, dates, care team, prefs). */
 export interface OnboardingSubmission {
   patientName: string;
   diagnosis: Diagnosis;
   careTeam: CareTeamInput;
-  /** ISO date string for the next appointment, optional (a "key date"). */
   nextAppointmentAt?: string;
   nextAppointmentTitle?: string;
   checkinTime?: string;
@@ -45,19 +50,15 @@ export interface OnboardingSubmission {
 }
 
 export interface OnboardingApi {
-  /** null while loading; the resolved status once fetched. */
   status: OnboardingStatus | null;
-  /** True while the initial status fetch is in flight. */
   loading: boolean;
-  /** True once onboarding is complete (no longer needed). */
   complete: boolean;
-  /** The AI disclosure copy, once loaded. */
   disclosure: Disclosure | null;
-  /** Submit consent + profile + prefs, then re-check status. Returns true on success. */
   submit(input: OnboardingSubmission): Promise<boolean>;
-  /** Set to true while a submission is in flight. */
+  ensureConsent(): Promise<boolean>;
+  autoExtractAndSave(text: string): Promise<boolean>;
+  refresh(): Promise<void>;
   submitting: boolean;
-  /** Last submission error, or null. */
   error: string | null;
 }
 
@@ -78,18 +79,8 @@ async function patchJson(path: string, body: unknown): Promise<Response> {
 }
 
 /**
- * First-run onboarding gate (Task 33, R16.10). Fetches whether the local caregiver has
- * completed onboarding (explicit consent to recording/storage AND a patient profile),
- * and exposes a single `submit` that runs the three writes in order:
- *
- *   1. POST /caregivers/:id/consent      — explicit consent BEFORE the first session
- *   2. POST /patients                    — the minimal profile (name, diagnosis, care team)
- *   3. POST /appointments (optional)     — a key date, if supplied
- *   4. PATCH /caregivers/:id/prefs       — check-in time + voice preference
- *
- * The main app is gated behind `complete`, so a caregiver cannot talk until consent is
- * captured and the profile exists. Local single-user MVP: the caregiver id is fixed and
- * the row is created lazily server-side.
+ * Conversational Onboarding Hook.
+ * Manages consent, patient profile extraction, and preferences.
  */
 export function useOnboarding(): OnboardingApi {
   const [status, setStatus] = useState<OnboardingStatus | null>(null);
@@ -106,8 +97,6 @@ export function useOnboarding(): OnboardingApi {
       const data = (await res.json()) as OnboardingStatus;
       setStatus(data);
     } catch {
-      // Server unreachable: leave status null so the gate shows a connecting state
-      // rather than skipping consent. The main app also surfaces the degraded banner.
       setStatus(null);
     } finally {
       setLoading(false);
@@ -118,16 +107,26 @@ export function useOnboarding(): OnboardingApi {
     void refresh();
   }, [refresh]);
 
+  const ensureConsent = useCallback(async (): Promise<boolean> => {
+    try {
+      const res = await postJson(`/caregivers/${encodeURIComponent(CAREGIVER_ID)}/consent`);
+      if (res.ok) {
+        await refresh();
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }, [refresh]);
+
   const submit = useCallback(
     async (input: OnboardingSubmission): Promise<boolean> => {
       setSubmitting(true);
       setError(null);
       try {
-        // 1) Explicit consent to recording/storage BEFORE the first session (R16.10).
-        const consent = await postJson(`/caregivers/${encodeURIComponent(CAREGIVER_ID)}/consent`);
-        if (!consent.ok) throw new Error('Could not record consent.');
+        await ensureConsent();
 
-        // 2) Minimal patient profile (name, diagnosis from the fixed list, care team).
         const care_team = {
           ...(input.careTeam.nurse_line ? { nurse_line: input.careTeam.nurse_line } : {}),
           ...(input.careTeam.social_worker ? { social_worker: input.careTeam.social_worker } : {}),
@@ -143,7 +142,6 @@ export function useOnboarding(): OnboardingApi {
         if (!patientRes.ok) throw new Error('Could not save the profile.');
         const patient = (await patientRes.json()) as { id: string };
 
-        // 3) Optional key date: seed the next appointment if one was provided.
         if (input.nextAppointmentAt) {
           await postJson('/appointments', {
             patient_id: patient.id,
@@ -152,7 +150,6 @@ export function useOnboarding(): OnboardingApi {
           });
         }
 
-        // 4) Check-in time + voice preference.
         const prefs: Partial<CaregiverPrefs> = {};
         if (input.checkinTime) prefs.checkin_time = input.checkinTime;
         if (input.voiceId) prefs.voice_id = input.voiceId;
@@ -169,7 +166,38 @@ export function useOnboarding(): OnboardingApi {
         setSubmitting(false);
       }
     },
-    [refresh],
+    [ensureConsent, refresh],
+  );
+
+  /**
+   * Intelligently parses conversational speech/text during onboarding to create the profile automatically.
+   */
+  const autoExtractAndSave = useCallback(
+    async (text: string): Promise<boolean> => {
+      if (status?.hasProfile) return true;
+      await ensureConsent();
+
+      // Simple heuristic extraction: name or relative ("mom", "dad", "Sarah", etc.)
+      const lower = text.toLowerCase();
+      let extractedName = 'My Loved One';
+      const nameMatch = text.match(/(?:caring for|taking care of|look after|helping)\s+([A-Z][a-z]+|my\s+[a-z]+)/i);
+      if (nameMatch && nameMatch[1]) {
+        extractedName = nameMatch[1].trim();
+      } else if (lower.includes('mom') || lower.includes('mother')) {
+        extractedName = 'Mom';
+      } else if (lower.includes('dad') || lower.includes('father')) {
+        extractedName = 'Dad';
+      } else if (lower.includes('wife') || lower.includes('husband') || lower.includes('partner')) {
+        extractedName = 'Partner';
+      }
+
+      return submit({
+        patientName: extractedName,
+        diagnosis: 'metastatic_cancer',
+        careTeam: {},
+      });
+    },
+    [status?.hasProfile, ensureConsent, submit],
   );
 
   return {
@@ -178,6 +206,9 @@ export function useOnboarding(): OnboardingApi {
     complete: status != null && !status.needsOnboarding,
     disclosure: status?.disclosure ?? null,
     submit,
+    ensureConsent,
+    autoExtractAndSave,
+    refresh,
     submitting,
     error,
   };

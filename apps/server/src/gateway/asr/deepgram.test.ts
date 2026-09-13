@@ -257,6 +257,26 @@ describe('Deepgram provider — interim vs final transcripts (R3.3–R3.5)', () 
     expect(interim).toEqual(['part one']);
     expect(finals).toEqual([{ text: 'part one and done', confidence: 0.9 }]);
   });
+
+  it('commits an is_final result returned in response to an explicit finalize', () => {
+    const conn = new FakeDeepgramConnection();
+    const { interim, finals, callbacks } = collectingCallbacks();
+    const provider = createDeepgramAsrProvider(cfg, () => conn);
+    const stream = provider.open(callbacks) as AsrStream;
+    conn.emitOpen();
+
+    stream.endTurn();
+    // Deepgram can acknowledge Finalize with a completed result while leaving the
+    // VAD-specific speech_final flag false.
+    conn.emit(DEEPGRAM_EVENTS.transcript, {
+      is_final: true,
+      speech_final: false,
+      channel: { alternatives: [{ transcript: 'second question', confidence: 0.94 }] },
+    });
+
+    expect(interim).toEqual([]);
+    expect(finals).toEqual([{ text: 'second question', confidence: 0.94 }]);
+  });
 });
 
 // ----------------------------------------------------------------------------

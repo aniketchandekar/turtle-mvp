@@ -8,15 +8,13 @@ import type { TtsCallbacks, TtsProvider, TtsStream } from '../index.js';
  * Turns the orchestrator's `say` text into spoken PCM over a single ElevenLabs
  * stream-input WebSocket, using the frozen Turtle preset (Flash v2.5, pcm_16000,
  * fixed voice, `stability 0.5 / similarity_boost 0.8 / use_speaker_boost false /
- * speed 1.0`, `chunk_length_schedule [120,160,250,290]`). The socket is opened once
- * and kept open for the whole session (no per-turn reconnect):
+ * speed 1.0`, `chunk_length_schedule [120,160,250,290]`).
  *
  *   - Each turn's `say` is split into sentences and streamed sentence-by-sentence.
  *   - `flush:true` rides the FINAL sentence of the turn so buffered text is spoken
  *     promptly at the turn boundary.
- *   - Between turns we send the `{"text":" "}` keepalive (a single space) to reset
- *     the 20s inactivity timeout WITHOUT generating audio. We NEVER send `""` —
- *     an empty string closes the ElevenLabs socket.
+ *   - An explicit `{"text":""}` follows the flushed final sentence. ElevenLabs uses
+ *     it to emit the terminal `isFinal` frame and close that turn's socket.
  *
  * Static strings (AI disclosure, greeting, crisis lines, recap) are pre-rendered
  * through the HTTP streaming endpoint (`renderStatic`) for sub-100ms availability;
@@ -158,8 +156,7 @@ function audioFromFrame(payload: unknown): Buffer | null {
 /**
  * A single per-session ElevenLabs synthesizer. `say` text pushed in flows to
  * ElevenLabs sentence-by-sentence (flush on the final sentence); PCM audio flows
- * back out through the channel callbacks. The socket is kept open across turns via
- * the space keepalive.
+ * back out through the channel callbacks. A fresh stream is opened for each turn.
  */
 class ElevenLabsTtsStream implements TtsStream {
   private closed = false;
@@ -186,17 +183,14 @@ class ElevenLabsTtsStream implements TtsStream {
     });
     this.conn.on(ELEVENLABS_EVENTS.message, (payload) => this.onMessage(payload));
     this.conn.on(ELEVENLABS_EVENTS.error, () => this.close());
-    this.conn.on(ELEVENLABS_EVENTS.close, () => {
-      this.closed = true;
-    });
+    this.conn.on(ELEVENLABS_EVENTS.close, () => this.close());
   }
 
   speak(say: string): void {
     if (this.closed) return;
     const sentences = splitSentences(say);
     if (sentences.length === 0) {
-      // Nothing to say — keep the socket warm for the next turn.
-      this.sendKeepalive();
+      this.callbacks.onTurnDone();
       return;
     }
     this.speaking = true;
@@ -208,28 +202,33 @@ class ElevenLabsTtsStream implements TtsStream {
       if (isFinal) frame.flush = true;
       this.enqueue(frame);
     });
+    // `flush` starts generation but does not end it. Without this EOS frame,
+    // ElevenLabs returns audio but never its terminal `isFinal` message.
+    this.enqueue({ text: '' });
   }
 
   /**
-   * Barge-in / turn boundary: stop forwarding this turn's audio. We keep the socket
-   * OPEN across turns (per the frozen preset) and send the space keepalive so the
-   * 20s inactivity timeout is reset without generating audio.
+   * Barge-in: abandon the active generation. The next turn opens a fresh stream.
    */
   flush(): void {
     if (this.closed) return;
-    this.speaking = false;
-    this.sendKeepalive();
+    this.close();
   }
 
   close(): void {
     if (this.closed) return;
+    const wasSpeaking = this.speaking;
     this.closed = true;
+    this.speaking = false;
     this.pending = [];
     try {
       this.conn.close();
     } catch {
       /* ignore teardown errors */
     }
+    // If the transport failed before ElevenLabs could send `isFinal`, let the
+    // gateway finish this turn as text instead of remaining in SPEAKING forever.
+    if (wasSpeaking) this.callbacks.onTurnDone();
   }
 
   private onMessage(payload: unknown): void {
@@ -239,19 +238,12 @@ class ElevenLabsTtsStream implements TtsStream {
       this.callbacks.onAudioChunk(audio);
     }
     // ElevenLabs marks the end of a generation with isFinal:true. That completes the
-    // current turn's audio; hand control back so the session can settle state and we
-    // hold the socket open (keepalive) until the next turn.
+    // current turn's audio; hand control back so the session can settle state.
     const isFinal = (payload as { isFinal?: unknown } | undefined)?.isFinal === true;
     if (isFinal && this.speaking) {
       this.speaking = false;
       this.callbacks.onTurnDone();
-      this.sendKeepalive();
     }
-  }
-
-  /** Send the `{"text":" "}` keepalive (single space) — never `""`. */
-  private sendKeepalive(): void {
-    this.enqueue(KEEPALIVE_FRAME);
   }
 
   private enqueue(frame: Record<string, unknown> | typeof KEEPALIVE_FRAME): void {

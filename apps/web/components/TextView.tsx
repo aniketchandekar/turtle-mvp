@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Transcript, type TranscriptLine } from '@/components/Transcript';
-import { Send } from 'lucide-react';
+import { ArrowUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface Props {
@@ -12,7 +12,7 @@ interface Props {
 }
 
 /**
- * Modern Text View with smooth scrolling transcript and floating glass message composer.
+ * ElevenLabs-style minimalist Text View with sleek transcript and rounded input bar.
  */
 export function TextView({ lines, onSend, disabled }: Props) {
   const [value, setValue] = useState('');
@@ -27,13 +27,13 @@ export function TextView({ lines, onSend, disabled }: Props) {
   return (
     <div className="flex flex-1 flex-col h-full min-h-0">
       {/* Scrollable conversation transcript */}
-      <div className="flex-1 overflow-y-auto px-1 py-3 scrollbar-thin">
+      <div className="flex-1 overflow-y-auto px-1 py-3">
         <Transcript lines={lines} />
       </div>
 
-      {/* Floating Glass Message Composer */}
+      {/* Minimalist Message Composer Bar */}
       <form
-        className="mt-2 flex items-center gap-2 rounded-2xl glass-panel p-2 shadow-2xl border border-white/10"
+        className="mt-2 flex items-center gap-2 rounded-full bg-[#121214] p-1.5 pl-4 border border-zinc-800/90 focus-within:border-zinc-600 transition-colors"
         onSubmit={(e) => {
           e.preventDefault();
           submit();
@@ -50,20 +50,20 @@ export function TextView({ lines, onSend, disabled }: Props) {
           onChange={(e) => setValue(e.target.value)}
           placeholder="Ask Turtle or note an update…"
           autoComplete="off"
-          className="flex-1 bg-transparent px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 outline-none"
+          className="flex-1 bg-transparent text-sm text-white placeholder:text-zinc-500 outline-none"
         />
         <button
           type="submit"
           disabled={disabled || value.trim().length === 0}
           aria-label="Send message"
           className={cn(
-            'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-all duration-200 cursor-pointer',
+            'flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-all duration-150 cursor-pointer',
             value.trim().length > 0
-              ? 'bg-gradient-to-tr from-teal-500 to-emerald-500 text-slate-950 shadow-md glow-primary hover:scale-105 active:scale-95'
-              : 'bg-slate-800/80 text-slate-500 cursor-not-allowed opacity-50',
+              ? 'bg-white text-black hover:bg-zinc-200 active:scale-95'
+              : 'bg-zinc-800/80 text-zinc-500 cursor-not-allowed opacity-40',
           )}
         >
-          <Send className="h-4 w-4" />
+          <ArrowUp className="h-4 w-4 stroke-[2.5]" />
         </button>
       </form>
     </div>

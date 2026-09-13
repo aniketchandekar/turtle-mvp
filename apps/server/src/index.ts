@@ -9,6 +9,8 @@ import { createGateway } from './gateway/index.js';
 import { createDeepgramProvider } from './gateway/asr/deepgram-sdk.js';
 import { createElevenLabsProvider } from './gateway/tts/elevenlabs-sdk.js';
 import { createE2eProcessor } from './orchestrator/index.js';
+import { createGeminiChatStream } from './services/llm/gemini.js';
+import { createLlmProvider } from './services/llm/index.js';
 
 /**
  * Turtle backend entrypoint. Single Node service combining the Voice Gateway (WS) and
@@ -37,16 +39,13 @@ function main(): void {
   const wss = new WebSocketServer({ server, path: '/ws' });
   const asr = createDeepgramProvider(cfg);
   const tts = createElevenLabsProvider(cfg);
-  // The real orchestrator wiring lands with the production composition root; until then
-  // the gateway runs its canned stub processor. For END-TO-END TESTS the app can be
-  // booted with TURTLE_E2E_PROCESSOR=1 to wire the zero-key deterministic orchestrator
-  // (createE2eProcessor) so the browser client exercises the full conversation spine —
-  // all modes, crisis, medical refusal, and recap — with no API keys. This flag is
-  // OFF by default, so it never changes production behavior; it exists purely so the
-  // Playwright E2E can drive real contract-driven turns deterministically (Task 38).
-  const useE2eProcessor = (process.env.TURTLE_E2E_PROCESSOR ?? '').trim() === '1';
-  const processor = useE2eProcessor ? createE2eProcessor() : undefined;
-  createGateway({ cfg, store, asr, tts, ...(processor ? { processor } : {}) }).attach(wss);
+  // The orchestrator remains safe with zero keys, but a configured Gemini key now
+  // powers normal check-ins and structured log extraction through the same validated
+  // contract path as every other turn. Other provider selections still degrade to the
+  // canned provider until their concrete adapters are added.
+  const llm = createLlmProvider(cfg, cfg.llm.provider === 'gemini' ? createGeminiChatStream : undefined);
+  const processor = createE2eProcessor({ llm });
+  createGateway({ cfg, store, asr, tts, processor }).attach(wss);
 
   server.listen(cfg.port, () => {
     console.log(`\nTurtle server listening on http://localhost:${cfg.port}`);

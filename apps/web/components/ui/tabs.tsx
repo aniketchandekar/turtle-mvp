@@ -6,7 +6,6 @@ import { Mic, MessageSquare } from 'lucide-react';
 export interface TabItem {
   value: string;
   label: string;
-  icon?: 'voice' | 'text';
 }
 
 interface TabsProps {
@@ -17,14 +16,14 @@ interface TabsProps {
 }
 
 /**
- * Modern segmented glass tab switcher.
+ * Minimalist icon-only tab switch (ElevenLabs style).
  */
 export function Tabs({ items, value, onValueChange, className }: TabsProps) {
   return (
     <div
       role="tablist"
       aria-label="Conversation mode"
-      className={cn('inline-flex items-center gap-1 rounded-full glass-pill p-1 shadow-inner', className)}
+      className={cn('inline-flex items-center gap-1 rounded-full bg-[#141416] p-1 border border-[#222226]', className)}
     >
       {items.map((item, index) => {
         const selected = item.value === value;
@@ -33,6 +32,8 @@ export function Tabs({ items, value, onValueChange, className }: TabsProps) {
             key={item.value}
             role="tab"
             aria-selected={selected}
+            aria-label={item.label}
+            title={item.label}
             tabIndex={selected ? 0 : -1}
             onClick={() => onValueChange(item.value)}
             onKeyDown={(e) => {
@@ -44,15 +45,17 @@ export function Tabs({ items, value, onValueChange, className }: TabsProps) {
               }
             }}
             className={cn(
-              'flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold tracking-wide transition-all duration-200',
+              'flex h-8 w-8 items-center justify-center rounded-full transition-all duration-150 cursor-pointer',
               selected
-                ? 'bg-gradient-to-r from-teal-500 to-emerald-500 text-slate-950 shadow-md glow-primary font-bold'
-                : 'text-slate-400 hover:text-slate-100 hover:bg-white/5',
+                ? 'bg-white text-black shadow-sm'
+                : 'text-zinc-400 hover:text-white hover:bg-white/10',
             )}
           >
-            {item.value === 'voice' && <Mic className="h-3.5 w-3.5" />}
-            {item.value === 'text' && <MessageSquare className="h-3.5 w-3.5" />}
-            <span>{item.label}</span>
+            {item.value === 'voice' ? (
+              <Mic className="h-4 w-4" />
+            ) : (
+              <MessageSquare className="h-4 w-4" />
+            )}
           </button>
         );
       })}

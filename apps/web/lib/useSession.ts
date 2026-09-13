@@ -212,6 +212,21 @@ export function useSession(events: SessionEvents = {}): SessionApi {
   // ---- WebSocket lifecycle: one connection per session, kept open ----
   useEffect(() => {
     let disposed = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let reconnectAttempts = 0;
+
+    const reconnect = () => {
+      if (disposed || reconnectTimer) return;
+      // The server is commonly restarted during local development. A closed socket
+      // must create a fresh server session before accepting another turn.
+      const delay = Math.min(1_000 * 2 ** reconnectAttempts, 5_000);
+      reconnectAttempts += 1;
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        void connect();
+      }, delay);
+    };
+
     playerRef.current = new PcmPlayer({
       // End-of-utterance: the turn's audio has finished at the speakers. This is the
       // gate for rendering that turn's card (R10.3/R16.2 — within 500ms of the spoken
@@ -240,6 +255,7 @@ export function useSession(events: SessionEvents = {}): SessionApi {
         if (!disposed) {
           const message = 'Could not reach the Turtle server.';
           evRef.current.onError?.('server_unreachable', message, false);
+          reconnect();
         }
         return;
       }
@@ -251,6 +267,7 @@ export function useSession(events: SessionEvents = {}): SessionApi {
 
       ws.onopen = () => {
         boundRef.current = true;
+        reconnectAttempts = 0;
         // Bind this socket to the session created above.
         ws.send(JSON.stringify({ type: 'attach_session', session_id: sessionId }));
         if (!disposed) setConnected(true);
@@ -270,7 +287,12 @@ export function useSession(events: SessionEvents = {}): SessionApi {
       };
 
       ws.onclose = () => {
-        if (!disposed) setConnected(false);
+        if (disposed || wsRef.current !== ws) return;
+        wsRef.current = null;
+        boundRef.current = false;
+        setConnected(false);
+        setAssistantState('IDLE');
+        reconnect();
       };
       ws.onerror = () => {
         if (!disposed) {
@@ -332,6 +354,7 @@ export function useSession(events: SessionEvents = {}): SessionApi {
 
     return () => {
       disposed = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
       boundRef.current = false;
       capture.stop();
       const ws = wsRef.current;

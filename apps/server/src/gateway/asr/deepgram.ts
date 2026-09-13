@@ -85,6 +85,8 @@ function firstAlternative(payload: unknown): { transcript: string; confidence: n
 class DeepgramAsrStream implements AsrStream {
   private closed = false;
   private ready = false;
+  /** True after the client ends push-to-talk and asks Deepgram to finalize. */
+  private awaitingExplicitFinal = false;
   /** Audio captured before the socket signalled `open`, flushed once ready. */
   private pending: Buffer[] = [];
 
@@ -118,7 +120,10 @@ class DeepgramAsrStream implements AsrStream {
   endTurn(): void {
     if (this.closed) return;
     // Prefer an explicit finalize so Deepgram flushes the utterance promptly on
-    // button release; VAD endpointing still commits finals mid-turn on its own.
+    // button release. The resulting result may be `is_final:true` without the
+    // VAD-specific `speech_final:true`, so remember that this finalization was
+    // explicitly requested and accept that final result below.
+    this.awaitingExplicitFinal = true;
     try {
       this.conn.finalize?.();
     } catch {
@@ -144,12 +149,18 @@ class DeepgramAsrStream implements AsrStream {
     if (!alt || alt.transcript.length === 0) return;
 
     const result = payload as DeepgramResult;
-    // A committed user turn is an endpointed final. Deepgram marks interim results
-    // with is_final=false; the utterance boundary (VAD endpointing) is speech_final.
-    // Fall back to is_final when speech_final isn't present on the payload.
-    const isFinal = result.speech_final === true || (result.speech_final == null && result.is_final === true);
+    // A committed user turn is normally a VAD endpoint (`speech_final:true`). On a
+    // button release we explicitly send Finalize; Deepgram may answer that request
+    // with `is_final:true, speech_final:false`. Treat that as the end of this turn
+    // too, otherwise the gateway remains in THINKING waiting for an endpoint that
+    // will never arrive.
+    const isFinal =
+      result.speech_final === true ||
+      (result.is_final === true &&
+        (result.speech_final == null || this.awaitingExplicitFinal));
 
     if (isFinal) {
+      this.awaitingExplicitFinal = false;
       this.callbacks.onFinal(alt.transcript, alt.confidence);
     } else {
       this.callbacks.onInterim(alt.transcript);

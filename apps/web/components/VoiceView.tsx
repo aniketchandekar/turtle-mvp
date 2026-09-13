@@ -18,10 +18,9 @@ interface Props {
 }
 
 /**
- * Modern Voice Surface:
- * Atmospheric ambient radial glow framing the 3D Orb,
- * live glass status indicator with animated dot,
- * sleek waveform meter, and tactile glowing push-to-talk hero control.
+ * ElevenLabs-inspired minimalist Voice Surface:
+ * Clean 3D Orb floating on pitch black, minimal typography status indicator,
+ * clean audio waveform visualizer, and tactile circular push-to-talk button.
  */
 export function VoiceView({
   agentState,
@@ -50,81 +49,57 @@ export function VoiceView({
   }, []);
 
   return (
-    <div className="flex flex-1 flex-col items-center justify-between py-6 sm:py-8 select-none">
-      {/* Status indicator pill */}
+    <div className="flex flex-1 flex-col items-center justify-between py-4 sm:py-6 select-none">
+      {/* Clean Status Indicator */}
       <div className="flex items-center justify-center">
         <div
           className={cn(
-            'flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-semibold tracking-wide transition-all duration-300 glass-pill shadow-sm',
-            agentState === 'listening' && 'border-teal-500/40 bg-teal-950/40 text-teal-300 glow-primary',
-            agentState === 'thinking' && 'border-amber-500/40 bg-amber-950/40 text-amber-300',
-            agentState === 'talking' && 'border-cyan-500/40 bg-cyan-950/40 text-cyan-300',
-            !agentState && 'text-slate-400',
+            'flex items-center gap-2 rounded-full px-3.5 py-1 text-xs font-medium tracking-wide transition-all duration-200',
+            agentState === 'listening' && 'bg-zinc-900 text-white border border-zinc-700',
+            agentState === 'thinking' && 'bg-zinc-900 text-zinc-300 border border-zinc-700',
+            agentState === 'talking' && 'bg-zinc-900 text-white border border-zinc-700',
+            !agentState && 'text-zinc-500',
           )}
           aria-live="polite"
         >
           {agentState === 'listening' && (
             <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-teal-400 opacity-75" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-teal-500" />
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-white" />
             </span>
           )}
           {agentState === 'thinking' && (
-            <Sparkles className="h-3.5 w-3.5 animate-spin text-amber-400" />
+            <Sparkles className="h-3.5 w-3.5 animate-spin text-zinc-300" />
           )}
           {agentState === 'talking' && (
-            <Volume2 className="h-3.5 w-3.5 animate-pulse text-cyan-400" />
-          )}
-          {!agentState && (
-            <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
+            <Volume2 className="h-3.5 w-3.5 animate-pulse text-white" />
           )}
           <span>{micError ?? hint}</span>
         </div>
       </div>
 
-      {/* Ambient glowing 3D Orb canvas */}
+      {/* Floating 3D Orb Canvas on Pure Black */}
       <div className="relative my-auto grid place-items-center">
-        {/* Soft atmospheric radial bloom */}
-        <div
-          className={cn(
-            'absolute h-64 w-64 rounded-full filter blur-3xl transition-all duration-700 sm:h-80 sm:w-80 pointer-events-none',
-            agentState === 'listening'
-              ? 'bg-gradient-to-tr from-teal-500/30 to-emerald-500/30 animate-ambient-breathe'
-              : agentState === 'thinking'
-                ? 'bg-gradient-to-tr from-amber-500/25 to-teal-500/25'
-                : agentState === 'talking'
-                  ? 'bg-gradient-to-tr from-cyan-500/35 to-teal-500/35 animate-ambient-breathe'
-                  : 'bg-teal-500/15 opacity-50',
-          )}
-          aria-hidden="true"
-        />
-
-        {/* 3D Orb */}
-        <div className="relative h-60 w-60 sm:h-72 sm:w-72" aria-hidden="true">
-          <Orb agentState={agentState} colors={['#2dd4bf', '#38bdf8']} />
+        <div className="relative h-64 w-64 sm:h-80 sm:w-80" aria-hidden="true">
+          <Orb agentState={agentState} colors={['#CADCFC', '#A0B9D1']} />
         </div>
       </div>
 
-      {/* Bottom Controls: Waveform & Tactile Push-to-Talk Hero Button */}
-      <div className="flex w-full max-w-sm flex-col items-center gap-6">
-        {/* Live Audio Waveform */}
-        <div className="h-10 w-full overflow-hidden rounded-xl glass-card px-3 py-1 flex items-center shadow-inner">
+      {/* Bottom Controls: Waveform & Tactile Circular Push-to-Talk Button */}
+      <div className="flex w-full max-w-xs flex-col items-center gap-5">
+        {/* Clean Audio Waveform */}
+        <div className="h-8 w-full overflow-hidden flex items-center justify-center opacity-80">
           <MicrophoneWaveform
             active={listening}
-            height={32}
-            barColor="#2dd4bf"
+            height={28}
+            barColor="#ffffff"
             onError={onError}
             className="w-full"
           />
         </div>
 
-        {/* Tactile Push-to-Talk Button */}
-        <div className="relative flex flex-col items-center">
-          {/* Active ripple wave effect */}
-          {listening && (
-            <div className="absolute inset-0 -m-3 rounded-full bg-teal-500/20 animate-ripple pointer-events-none" />
-          )}
-
+        {/* Tactile Push-to-Talk Circular Button */}
+        <div className="flex flex-col items-center">
           <button
             type="button"
             disabled={disabled}
@@ -154,23 +129,22 @@ export function VoiceView({
               }
             }}
             className={cn(
-              'group relative grid h-20 w-20 place-items-center rounded-full transition-all duration-300',
+              'grid h-16 w-16 place-items-center rounded-full transition-all duration-200',
               'touch-none select-none disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer',
-              'border border-white/15 backdrop-blur-md shadow-2xl',
               listening
-                ? 'scale-110 bg-gradient-to-tr from-teal-400 to-emerald-400 text-slate-950 glow-primary border-teal-300'
-                : 'bg-slate-900/80 text-teal-400 hover:scale-105 hover:border-teal-500/40 hover:bg-slate-800/90 active:scale-95 glow-primary',
+                ? 'scale-110 bg-white text-black shadow-[0_0_24px_rgba(255,255,255,0.35)]'
+                : 'bg-[#18181b] border border-zinc-700 text-zinc-300 hover:text-white hover:bg-zinc-800 hover:border-zinc-500 active:scale-95 shadow-lg',
             )}
           >
             <Mic
               className={cn(
-                'h-8 w-8 transition-transform duration-200',
-                listening ? 'scale-110 text-slate-950' : 'group-hover:scale-110 text-teal-400',
+                'h-6 w-6 transition-transform duration-150',
+                listening ? 'scale-110 text-black' : 'text-zinc-200',
               )}
             />
           </button>
 
-          <span className="mt-3 text-xs font-medium text-slate-400">
+          <span className="mt-2.5 text-xs text-zinc-500 font-medium tracking-tight">
             {listening ? 'Release to finish' : 'Press & hold to speak'}
           </span>
         </div>

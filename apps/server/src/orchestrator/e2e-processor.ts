@@ -162,7 +162,8 @@ async function checkinAck(llm: LlmProvider, userText: string): Promise<ModeOutpu
         role: 'system',
         content:
           'You are Turtle, a warm voice companion for a caregiver. Reply briefly and ' +
-          'supportively. No advice, no clinical content.',
+          'supportively. No advice, no clinical content. Reply ONLY with JSON in this ' +
+          'exact shape: {"say": string, "cards": [], "memory_ops": [], "flags": ["none"]}.',
       },
       { role: 'user', content: userText },
     ]);

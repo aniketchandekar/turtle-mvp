@@ -52,6 +52,7 @@ describe('loadConfig — providers live when keys present (R1.2)', () => {
     const cfg = loadConfig({
       DEEPGRAM_API_KEY: 'dg-key',
       ELEVENLABS_API_KEY: 'el-key',
+      ELEVENLABS_VOICE_ID: 'voice-id',
       ANTHROPIC_API_KEY: 'an-key',
       OPENAI_API_KEY: 'oa-key',
     });
@@ -67,6 +68,13 @@ describe('loadConfig — providers live when keys present (R1.2)', () => {
     expect(cfg.capabilities.asr.live).toBe(false);
     expect(cfg.capabilities.tts.live).toBe(false);
     expect(cfg.capabilities.embeddings.live).toBe(false);
+  });
+
+  it('requires both an ElevenLabs key and a voice ID for TTS', () => {
+    expect(loadConfig({ ELEVENLABS_API_KEY: 'el-key' }).capabilities.tts.live).toBe(false);
+    expect(loadConfig({ ELEVENLABS_API_KEY: 'el-key', ELEVENLABS_VOICE_ID: 'voice-id' }).capabilities.tts.live).toBe(
+      true,
+    );
   });
 });
 

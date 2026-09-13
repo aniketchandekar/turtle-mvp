@@ -4,7 +4,7 @@ import type { HealthResponse } from '@/lib/useHealth';
 import { Info, WifiOff } from 'lucide-react';
 
 /**
- * Modern degraded status indicator.
+ * Minimalist degraded status indicator (ElevenLabs dark style).
  */
 export function DegradedBanner({ health }: { health: HealthResponse | null }) {
   const message = deriveMessage(health);
@@ -12,13 +12,13 @@ export function DegradedBanner({ health }: { health: HealthResponse | null }) {
 
   return (
     <div
-      className="mb-3 flex items-center justify-center gap-2 rounded-full glass-pill border border-amber-500/30 bg-amber-950/30 px-3.5 py-1.5 text-center text-xs font-medium text-amber-200 shadow-sm"
+      className="my-2 flex items-center justify-center gap-2 rounded-full bg-zinc-900 border border-zinc-800 px-3 py-1 text-center text-xs font-normal text-zinc-400"
       role="status"
     >
       {health === null ? (
-        <WifiOff className="h-3.5 w-3.5 text-amber-400 animate-pulse" />
+        <WifiOff className="h-3 w-3 text-zinc-400 animate-pulse" />
       ) : (
-        <Info className="h-3.5 w-3.5 text-amber-400" />
+        <Info className="h-3 w-3 text-zinc-400" />
       )}
       <span>{message}</span>
     </div>

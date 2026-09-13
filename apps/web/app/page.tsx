@@ -11,9 +11,9 @@ import { DegradedBanner } from '@/components/DegradedBanner';
 import { useHealth } from '@/lib/useHealth';
 import { useOnboarding } from '@/lib/useOnboarding';
 import { Onboarding } from '@/components/Onboarding';
-import { PrivacyControls } from '@/components/PrivacyControls';
 import { useSession } from '@/lib/useSession';
 import type { AgentState } from '@/components/ui/orb';
+import { User } from 'lucide-react';
 
 type Mode = 'voice' | 'text';
 
@@ -26,7 +26,7 @@ function toAgentState(state: AssistantState, capturing: boolean): AgentState {
 }
 
 /**
- * Turtle modern client shell.
+ * Turtle client shell (ElevenLabs minimalist dark interface).
  */
 export default function Home() {
   const health = useHealth();
@@ -34,8 +34,10 @@ export default function Home() {
   const [mode, setMode] = useState<Mode>('voice');
   const [lines, setLines] = useState<TranscriptLine[]>([]);
   const [card, setCard] = useState<Card | null>(null);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
   const seq = useRef(0);
   const interimIdRef = useRef<number | null>(null);
+  const initializedGreeting = useRef(false);
 
   const addLine = useCallback((line: Omit<TranscriptLine, 'id'>): number => {
     seq.current += 1;
@@ -56,17 +58,25 @@ export default function Home() {
     });
   }, []);
 
-  const commitFinal = useCallback((text: string) => {
-    setLines((prev) => {
-      const id = interimIdRef.current;
-      interimIdRef.current = null;
-      if (id != null) {
-        return prev.map((l) => (l.id === id ? { ...l, text, interim: false } : l));
+  const commitFinal = useCallback(
+    (text: string) => {
+      setLines((prev) => {
+        const id = interimIdRef.current;
+        interimIdRef.current = null;
+        if (id != null) {
+          return prev.map((l) => (l.id === id ? { ...l, text, interim: false } : l));
+        }
+        seq.current += 1;
+        return [...prev, { id: seq.current, speaker: 'user', text, interim: false }];
+      });
+
+      // Auto-extract and record consent in background on conversational speech
+      if (!onboarding.complete) {
+        void onboarding.autoExtractAndSave(text);
       }
-      seq.current += 1;
-      return [...prev, { id: seq.current, speaker: 'user', text, interim: false }];
-    });
-  }, []);
+    },
+    [onboarding],
+  );
 
   const session = useSession({
     onTranscriptInterim: upsertInterim,
@@ -90,69 +100,50 @@ export default function Home() {
   const onSendText = useCallback(
     (text: string) => {
       addLine({ speaker: 'user', text, interim: false });
+      if (!onboarding.complete) {
+        void onboarding.autoExtractAndSave(text);
+      }
       session.sendText(text);
     },
-    [addLine, session],
+    [addLine, onboarding, session],
   );
 
+  // Initialize opening conversation line based on onboarding status
   useEffect(() => {
-    addLine({
-      speaker: 'assistant',
-      text: 'Turtle is software — not a person. Press and hold to talk, or switch to Text.',
-      interim: false,
-    });
-  }, [addLine]);
+    if (initializedGreeting.current || onboarding.loading) return;
+    initializedGreeting.current = true;
 
-  if (!onboarding.complete) {
-    if (onboarding.loading || onboarding.status === null) {
-      return (
-        <main
-          className="mx-auto grid h-[100dvh] w-full max-w-2xl place-items-center px-5"
-          aria-label="Turtle"
-        >
-          <div className="flex flex-col items-center gap-3 text-slate-400">
-            <div className="h-9 w-9 rounded-full border-2 border-teal-500/30 border-t-teal-400 animate-spin" />
-            <p className="text-sm font-medium" role="status">
-              Connecting to Turtle…
-            </p>
-          </div>
-        </main>
-      );
+    if (onboarding.status?.needsOnboarding) {
+      addLine({
+        speaker: 'assistant',
+        text: "Hi, I'm Turtle — an AI companion for caregivers. I help you track symptoms, organize doctor notes, and prepare for visits. Who are you caring for today?",
+        interim: false,
+      });
+    } else {
+      const patientName = onboarding.status?.patient?.name;
+      addLine({
+        speaker: 'assistant',
+        text: patientName
+          ? `Welcome back to Turtle. How is ${patientName} feeling today, or is there an update you'd like to log?`
+          : 'Turtle is ready. Press and hold to talk, or switch to Text.',
+        interim: false,
+      });
     }
-    return (
-      <Onboarding
-        disclosure={onboarding.disclosure}
-        submitting={onboarding.submitting}
-        error={onboarding.error}
-        onSubmit={(input) => void onboarding.submit(input)}
-      />
-    );
-  }
+  }, [addLine, onboarding.loading, onboarding.status]);
 
   return (
     <main
-      className="mx-auto flex h-[100dvh] w-full max-w-2xl flex-col px-4 py-4 sm:px-6 overflow-hidden"
+      className="mx-auto flex h-[100dvh] w-full max-w-2xl flex-col px-4 py-3 sm:px-6 overflow-hidden bg-black text-white"
       aria-label="Turtle"
     >
-      {/* Sleek Floating Glass Header */}
-      <header className="flex items-center justify-between rounded-2xl glass-panel px-4 py-3 shadow-lg border border-white/10 shrink-0">
-        <div className="flex items-center gap-2.5">
-          <span
-            className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-teal-500 to-emerald-500 text-slate-950 shadow-md glow-primary font-bold"
-            aria-hidden="true"
-          >
-            <TurtleGlyph />
-          </span>
-          <div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-base font-bold tracking-tight text-slate-100">Turtle</span>
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" title="Ready" />
-            </div>
-            <p className="text-[11px] text-slate-400 leading-none">Caregiver companion</p>
-          </div>
-        </div>
+      {/* Minimal ElevenLabs Header: Name on left, Icon-only Tabs + Profile Icon on right */}
+      <header className="flex items-center justify-between py-2 shrink-0">
+        <span className="text-lg font-semibold tracking-tight text-white">
+          Turtle
+        </span>
 
         <div className="flex items-center gap-2">
+          {/* Icon-only Voice / Text tab switch */}
           <Tabs
             items={[
               { value: 'voice', label: 'Voice' },
@@ -161,11 +152,20 @@ export default function Home() {
             value={mode}
             onValueChange={(v) => setMode(v as Mode)}
           />
-          <PrivacyControls />
+
+          {/* Profile Icon Button */}
+          <button
+            onClick={() => setProfileModalOpen(true)}
+            aria-label="Care profile and settings"
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-[#141416] border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
+          >
+            <User className="h-4 w-4" />
+          </button>
         </div>
       </header>
 
-      <div className="mt-3 shrink-0">
+      {/* Degraded mode indicator (only renders if system is degraded) */}
+      <div className="shrink-0">
         <DegradedBanner health={health} />
       </div>
 
@@ -198,22 +198,17 @@ export default function Home() {
           }}
         />
       </div>
-    </main>
-  );
-}
 
-/** Bespoke Turtle logo mark */
-function TurtleGlyph() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true" className="text-slate-950">
-      <path
-        d="M12 4C7.5 4 4 7.5 4 12c0 2.5 1.2 4.8 3 6.2M12 4c4.5 0 8 3.5 8 8 0 2.5-1.2 4.8-3 6.2"
-        stroke="currentColor"
-        strokeWidth="2.2"
-        strokeLinecap="round"
+      {/* Care Profile Modal */}
+      <Onboarding
+        isOpen={profileModalOpen}
+        onClose={() => setProfileModalOpen(false)}
+        disclosure={onboarding.disclosure}
+        existingPatient={onboarding.status?.patient}
+        submitting={onboarding.submitting}
+        error={onboarding.error}
+        onSubmit={onboarding.submit}
       />
-      <circle cx="12" cy="12" r="3" fill="currentColor" />
-      <path d="M7 19l-1 2M17 19l1 2M12 20v2" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-    </svg>
+    </main>
   );
 }
