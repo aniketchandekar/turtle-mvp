@@ -70,7 +70,8 @@ export const TTS_PRESET = {
   model_id: 'eleven_flash_v2_5',
   output_format: 'pcm_16000',
   voice_settings: {
-    stability: 0.5,
+    // A little variation keeps Turtle warm and human without becoming theatrical.
+    stability: 0.35,
     similarity_boost: 0.8,
     style: 0.0,
     use_speaker_boost: false,

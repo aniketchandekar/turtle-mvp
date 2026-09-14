@@ -133,7 +133,7 @@ describe('loadConfig — documented defaults (R1.4)', () => {
   it('applies the frozen ElevenLabs voice settings and chunk schedule', () => {
     const cfg = loadConfig(EMPTY);
     expect(cfg.elevenlabs.voiceSettings).toEqual(TTS_PRESET.voice_settings);
-    expect(cfg.elevenlabs.voiceSettings.stability).toBe(0.5);
+    expect(cfg.elevenlabs.voiceSettings.stability).toBe(0.35);
     expect(cfg.elevenlabs.voiceSettings.similarity_boost).toBe(0.8);
     expect(cfg.elevenlabs.voiceSettings.use_speaker_boost).toBe(false);
     expect(cfg.elevenlabs.voiceSettings.speed).toBe(1.0);
