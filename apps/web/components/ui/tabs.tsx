@@ -23,7 +23,7 @@ export function Tabs({ items, value, onValueChange, className }: TabsProps) {
     <div
       role="tablist"
       aria-label="Conversation mode"
-      className={cn('inline-flex items-center gap-1 rounded-full bg-[#141416] p-1 border border-[#222226]', className)}
+      className={cn('inline-flex items-center gap-1 rounded-full bg-[#f1f5f9] p-1 border border-[#cbd5e1]', className)}
     >
       {items.map((item, index) => {
         const selected = item.value === value;
@@ -47,12 +47,12 @@ export function Tabs({ items, value, onValueChange, className }: TabsProps) {
             className={cn(
               'flex h-8 w-8 items-center justify-center rounded-full transition-all duration-150 cursor-pointer',
               selected
-                ? 'bg-white text-black shadow-sm'
-                : 'text-zinc-400 hover:text-white hover:bg-white/10',
+                ? 'bg-[#1d4ed8] text-white shadow-xs'
+                : 'text-[#64748b] hover:text-[#0b192c] hover:bg-[#e2e8f0]',
             )}
           >
             {item.value === 'voice' ? (
-              <Mic className="h-4 w-4" />
+              <Mic className={cn('h-4 w-4', selected && 'text-[#fbbf24]')} />
             ) : (
               <MessageSquare className="h-4 w-4" />
             )}

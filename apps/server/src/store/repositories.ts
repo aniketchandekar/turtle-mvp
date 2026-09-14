@@ -125,6 +125,24 @@ export function createRepositories(db: DB, cipher: Cipher) {
           care_team: p(cipher.decrypt(r.care_team), {}),
         } as Patient;
       },
+      /** Update the single care-recipient profile without creating a duplicate row. */
+      update(patientId: string, patch: Pick<Patient, 'name' | 'diagnosis' | 'diagnosis_notes' | 'care_team'>): Patient | null {
+        const existing = this.get(patientId);
+        if (!existing) return null;
+        const row: Patient = { ...existing, ...patch };
+        db.prepare(
+          `UPDATE patient
+           SET name = @name, diagnosis = @diagnosis, diagnosis_notes = @diagnosis_notes, care_team = @care_team
+           WHERE id = @id`,
+        ).run({
+          id: row.id,
+          name: row.name,
+          diagnosis: row.diagnosis,
+          diagnosis_notes: row.diagnosis_notes,
+          care_team: cipher.encrypt(j(row.care_team)),
+        });
+        return row;
+      },
     },
 
     appointment: {

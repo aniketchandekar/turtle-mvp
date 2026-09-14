@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef } from "react"
+import { Suspense, useEffect, useMemo, useRef } from "react"
 import { useTexture } from "@react-three/drei"
 import { Canvas, useFrame, useThree } from "@react-three/fiber"
 import * as THREE from "three"
@@ -21,10 +21,12 @@ type OrbProps = {
   getInputVolume?: () => number
   getOutputVolume?: () => number
   className?: string
+  inverted?: boolean
+  bgColor?: string
 }
 
 export function Orb({
-  colors = ["#CADCFC", "#A0B9D1"],
+  colors = ["#2563eb", "#f59e0b"],
   colorsRef,
   resizeDebounce = 100,
   seed,
@@ -37,6 +39,8 @@ export function Orb({
   getInputVolume,
   getOutputVolume,
   className,
+  inverted,
+  bgColor,
 }: OrbProps) {
   return (
     <div className={className ?? "relative h-full w-full"}>
@@ -48,19 +52,23 @@ export function Orb({
           premultipliedAlpha: true,
         }}
       >
-        <Scene
-          colors={colors}
-          colorsRef={colorsRef}
-          seed={seed}
-          agentState={agentState}
-          volumeMode={volumeMode}
-          manualInput={manualInput}
-          manualOutput={manualOutput}
-          inputVolumeRef={inputVolumeRef}
-          outputVolumeRef={outputVolumeRef}
-          getInputVolume={getInputVolume}
-          getOutputVolume={getOutputVolume}
-        />
+        <Suspense fallback={null}>
+          <Scene
+            colors={colors}
+            colorsRef={colorsRef}
+            seed={seed}
+            agentState={agentState}
+            volumeMode={volumeMode}
+            manualInput={manualInput}
+            manualOutput={manualOutput}
+            inputVolumeRef={inputVolumeRef}
+            outputVolumeRef={outputVolumeRef}
+            getInputVolume={getInputVolume}
+            getOutputVolume={getOutputVolume}
+            inverted={inverted}
+            bgColor={bgColor}
+          />
+        </Suspense>
       </Canvas>
     </div>
   )
@@ -78,6 +86,8 @@ function Scene({
   outputVolumeRef,
   getInputVolume,
   getOutputVolume,
+  inverted,
+  bgColor,
 }: {
   colors: [string, string]
   colorsRef?: React.RefObject<[string, string]>
@@ -90,6 +100,8 @@ function Scene({
   outputVolumeRef?: React.RefObject<number>
   getInputVolume?: () => number
   getOutputVolume?: () => number
+  inverted?: boolean
+  bgColor?: string
 }) {
   const { gl } = useThree()
   const circleRef =
@@ -147,7 +159,10 @@ function Scene({
   useEffect(() => {
     const apply = () => {
       if (!circleRef.current) return
-      const isDark = document.documentElement.classList.contains("dark")
+      const isDark =
+        inverted !== undefined
+          ? inverted
+          : document.documentElement.classList.contains("dark")
       circleRef.current.material.uniforms.uInverted.value = isDark ? 1 : 0
     }
 
@@ -159,7 +174,7 @@ function Scene({
       attributeFilter: ["class"],
     })
     return () => observer.disconnect()
-  }, [])
+  }, [inverted])
 
   useFrame((_, delta: number) => {
     const mat = circleRef.current?.material
@@ -234,11 +249,15 @@ function Scene({
     perlinNoiseTexture.wrapS = THREE.RepeatWrapping
     perlinNoiseTexture.wrapT = THREE.RepeatWrapping
     const isDark =
-      typeof document !== "undefined" &&
-      document.documentElement.classList.contains("dark")
+      inverted !== undefined
+        ? inverted
+        : typeof document !== "undefined" &&
+          document.documentElement.classList.contains("dark")
+    const darkBaseColor = bgColor ?? (isDark ? "#0b192c" : "#000000")
     return {
       uColor1: new THREE.Uniform(new THREE.Color(initialColorsRef.current[0])),
       uColor2: new THREE.Uniform(new THREE.Color(initialColorsRef.current[1])),
+      uBgColor: new THREE.Uniform(new THREE.Color(darkBaseColor)),
       uOffsets: { value: offsets },
       uPerlinTexture: new THREE.Uniform(perlinNoiseTexture),
       uTime: new THREE.Uniform(0),
@@ -248,7 +267,7 @@ function Scene({
       uOutputVolume: new THREE.Uniform(0),
       uOpacity: new THREE.Uniform(0),
     }
-  }, [perlinNoiseTexture, offsets])
+  }, [perlinNoiseTexture, offsets, inverted, bgColor])
 
   return (
     <mesh ref={circleRef}>
@@ -297,6 +316,7 @@ uniform float uInverted;
 uniform float uOffsets[7];
 uniform vec3 uColor1;
 uniform vec3 uColor2;
+uniform vec3 uBgColor;
 uniform float uInputVolume;
 uniform float uOutputVolume;
 uniform float uOpacity;
@@ -481,7 +501,7 @@ void main() {
     color.rgb = 1.0 - (1.0 - color.rgb) * (1.0 - ringColor * totalRingAlpha);
 
     // Define colours to ramp against greyscale (could increase the amount of colours in the ramp)
-    vec3 color1 = vec3(0.0, 0.0, 0.0); // Black
+    vec3 color1 = uBgColor; // Base background / deep base color
     vec3 color2 = uColor1; // Darker Color
     vec3 color3 = uColor2; // Lighter Color
     vec3 color4 = vec3(1.0, 1.0, 1.0); // White

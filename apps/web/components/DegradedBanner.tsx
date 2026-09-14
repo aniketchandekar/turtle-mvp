@@ -12,13 +12,13 @@ export function DegradedBanner({ health }: { health: HealthResponse | null }) {
 
   return (
     <div
-      className="my-2 flex items-center justify-center gap-2 rounded-full bg-zinc-900 border border-zinc-800 px-3 py-1 text-center text-xs font-normal text-zinc-400"
+      className="my-2 flex items-center justify-center gap-2 rounded-full bg-[#eff6ff] border border-[#bfdbfe] px-3.5 py-1 text-center text-xs font-semibold text-[#1d4ed8]"
       role="status"
     >
       {health === null ? (
-        <WifiOff className="h-3 w-3 text-zinc-400 animate-pulse" />
+        <WifiOff className="h-3 w-3 text-[#f59e0b] animate-pulse" />
       ) : (
-        <Info className="h-3 w-3 text-zinc-400" />
+        <Info className="h-3 w-3 text-[#1d4ed8]" />
       )}
       <span>{message}</span>
     </div>

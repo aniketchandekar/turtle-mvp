@@ -41,6 +41,13 @@ export const cardActionSchema = z.object({
 });
 export type CardAction = z.infer<typeof cardActionSchema>;
 
+/** A trusted external reference displayed inside Turtle's single active card. */
+export const resourceLinkSchema = z.object({
+  title: z.string().min(1).max(120),
+  url: z.string().url(),
+});
+export type ResourceLink = z.infer<typeof resourceLinkSchema>;
+
 export const cardSchema = z.object({
   // A mode/LLM never produces an id — the store assigns it on persist. The gateway
   // stamps the persisted id onto the card before forwarding the turn_contract, so the
@@ -52,6 +59,9 @@ export const cardSchema = z.object({
   // Body kept short by design (~3 lines). Enforced softly with a max length.
   body: z.string().max(280),
   action: cardActionSchema.optional(),
+  // Resource searches retain the one-card invariant while presenting a short,
+  // source-attributed list of trusted links.
+  links: z.array(resourceLinkSchema).min(1).max(3).optional(),
   expires_at: z.string().datetime().nullable().optional(),
 });
 export type Card = z.infer<typeof cardSchema>;

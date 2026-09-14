@@ -77,9 +77,9 @@ describe('GET /health — degraded reporting (R1.2)', () => {
       expect(cap.fallback.length).toBeGreaterThan(0);
     }
 
-    // All four capabilities appear in the disabled summary with a reason.
+    // Every capability appears in the disabled summary with a reason.
     const disabledKeys = body.disabledCapabilities.map((d: { capability: string }) => d.capability);
-    expect(disabledKeys.sort()).toEqual(['asr', 'embeddings', 'llm', 'tts']);
+    expect(disabledKeys.sort()).toEqual(['asr', 'embeddings', 'llm', 'tts', 'webSearch']);
     for (const d of body.disabledCapabilities) {
       expect(d.reason.length).toBeGreaterThan(0);
     }
@@ -92,6 +92,7 @@ describe('GET /health — degraded reporting (R1.2)', () => {
       ELEVENLABS_VOICE_ID: 'voice',
       ANTHROPIC_API_KEY: 'an',
       OPENAI_API_KEY: 'oa',
+      GEMINI_API_KEY: 'gemini',
     });
     const { body } = await getJson(app, '/health');
 
@@ -109,7 +110,7 @@ describe('GET /health — degraded reporting (R1.2)', () => {
     expect(body.status).toBe('degraded');
     const disabledKeys = body.disabledCapabilities.map((d: { capability: string }) => d.capability);
     expect(disabledKeys).not.toContain('llm');
-    expect(disabledKeys.sort()).toEqual(['asr', 'embeddings', 'tts']);
+    expect(disabledKeys.sort()).toEqual(['asr', 'embeddings', 'tts', 'webSearch']);
   });
 });
 
@@ -425,6 +426,31 @@ describe('Onboarding, consent, and AI disclosure (Task 33, R16.10)', () => {
     expect(done.body.hasConsent).toBe(true);
     expect(done.body.hasProfile).toBe(true);
     expect(done.body.needsOnboarding).toBe(false);
+  });
+
+  it('PATCH /patients/:id edits the existing care profile without creating another patient', async () => {
+    const { app, store } = makeApp(EMPTY);
+    const caregiver = store.repos.caregiver.create({ display_name: 'Alex' });
+    const patient = store.repos.patient.create({
+      caregiver_id: caregiver.id,
+      name: 'Sam',
+      diagnosis: 'metastatic_cancer',
+      diagnosis_notes: null,
+      care_team: { other: [] },
+    });
+
+    const updated = await request(app, 'PATCH', `/patients/${patient.id}`, {
+      name: 'Samuel',
+      diagnosis: 'metastatic_cancer',
+      care_team: { oncologist: 'Dr. Chen', other: [] },
+    });
+    expect(updated.status).toBe(200);
+    expect(updated.body).toMatchObject({ id: patient.id, name: 'Samuel' });
+    expect(store.repos.patient.getByCaregiver(caregiver.id)).toMatchObject({
+      id: patient.id,
+      name: 'Samuel',
+      care_team: { oncologist: 'Dr. Chen', other: [] },
+    });
   });
 });
 

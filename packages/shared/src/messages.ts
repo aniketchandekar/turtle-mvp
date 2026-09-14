@@ -15,6 +15,11 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('turn_end') }),
   z.object({ type: z.literal('interrupt') }),
   z.object({ type: z.literal('text_input'), text: z.string().min(1) }),
+  // Server-guided onboarding keeps the temporary answers on the socket until the
+  // caregiver has reviewed both fields and explicitly confirms them.
+  z.object({ type: z.literal('onboarding_answer'), value: z.string().min(1) }),
+  z.object({ type: z.literal('onboarding_confirm') }),
+  z.object({ type: z.literal('onboarding_edit') }),
   z.object({
     type: z.literal('card_action'),
     card_id: z.string().min(1),
@@ -25,12 +30,23 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
 ]);
 export type ClientMessage = z.infer<typeof clientMessageSchema>;
 
+export const onboardingPromptSchema = z.object({
+  step: z.enum(['name', 'diagnosis', 'complete']),
+  question: z.string().min(1),
+  value: z.string().optional(),
+  choices: z.array(z.string().min(1)).max(4).optional(),
+  confirmation: z.boolean().optional(),
+  complete: z.boolean().optional(),
+});
+export type OnboardingPrompt = z.infer<typeof onboardingPromptSchema>;
+
 // ---- Server -> Client (JSON messages) ----
 export const serverMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('transcript_interim'), text: z.string() }),
   z.object({ type: z.literal('transcript_final'), text: z.string() }),
   z.object({ type: z.literal('assistant_state'), state: z.enum(ASSISTANT_STATES) }),
   z.object({ type: z.literal('turn_contract'), contract: turnContractSchema }),
+  z.object({ type: z.literal('onboarding_prompt'), prompt: onboardingPromptSchema }),
   z.object({
     type: z.literal('error'),
     code: z.string(),

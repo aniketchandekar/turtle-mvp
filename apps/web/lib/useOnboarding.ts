@@ -56,7 +56,6 @@ export interface OnboardingApi {
   disclosure: Disclosure | null;
   submit(input: OnboardingSubmission): Promise<boolean>;
   ensureConsent(): Promise<boolean>;
-  autoExtractAndSave(text: string): Promise<boolean>;
   refresh(): Promise<void>;
   submitting: boolean;
   error: string | null;
@@ -125,20 +124,26 @@ export function useOnboarding(): OnboardingApi {
       setSubmitting(true);
       setError(null);
       try {
-        await ensureConsent();
-
         const care_team = {
           ...(input.careTeam.nurse_line ? { nurse_line: input.careTeam.nurse_line } : {}),
           ...(input.careTeam.social_worker ? { social_worker: input.careTeam.social_worker } : {}),
           ...(input.careTeam.oncologist ? { oncologist: input.careTeam.oncologist } : {}),
           other: [],
         };
-        const patientRes = await postJson('/patients', {
-          caregiver_id: CAREGIVER_ID,
-          name: input.patientName,
-          diagnosis: input.diagnosis,
-          care_team,
-        });
+        const existingPatient = status?.patient;
+        if (!existingPatient) await ensureConsent();
+        const patientRes = existingPatient
+          ? await patchJson(`/patients/${encodeURIComponent(existingPatient.id)}`, {
+              name: input.patientName,
+              diagnosis: input.diagnosis,
+              care_team,
+            })
+          : await postJson('/patients', {
+              caregiver_id: CAREGIVER_ID,
+              name: input.patientName,
+              diagnosis: input.diagnosis,
+              care_team,
+            });
         if (!patientRes.ok) throw new Error('Could not save the profile.');
         const patient = (await patientRes.json()) as { id: string };
 
@@ -166,38 +171,7 @@ export function useOnboarding(): OnboardingApi {
         setSubmitting(false);
       }
     },
-    [ensureConsent, refresh],
-  );
-
-  /**
-   * Intelligently parses conversational speech/text during onboarding to create the profile automatically.
-   */
-  const autoExtractAndSave = useCallback(
-    async (text: string): Promise<boolean> => {
-      if (status?.hasProfile) return true;
-      await ensureConsent();
-
-      // Simple heuristic extraction: name or relative ("mom", "dad", "Sarah", etc.)
-      const lower = text.toLowerCase();
-      let extractedName = 'My Loved One';
-      const nameMatch = text.match(/(?:caring for|taking care of|look after|helping)\s+([A-Z][a-z]+|my\s+[a-z]+)/i);
-      if (nameMatch && nameMatch[1]) {
-        extractedName = nameMatch[1].trim();
-      } else if (lower.includes('mom') || lower.includes('mother')) {
-        extractedName = 'Mom';
-      } else if (lower.includes('dad') || lower.includes('father')) {
-        extractedName = 'Dad';
-      } else if (lower.includes('wife') || lower.includes('husband') || lower.includes('partner')) {
-        extractedName = 'Partner';
-      }
-
-      return submit({
-        patientName: extractedName,
-        diagnosis: 'metastatic_cancer',
-        careTeam: {},
-      });
-    },
-    [status?.hasProfile, ensureConsent, submit],
+    [ensureConsent, refresh, status?.patient],
   );
 
   return {
@@ -207,7 +181,6 @@ export function useOnboarding(): OnboardingApi {
     disclosure: status?.disclosure ?? null,
     submit,
     ensureConsent,
-    autoExtractAndSave,
     refresh,
     submitting,
     error,

@@ -14,6 +14,7 @@ import { createLlmProvider } from './services/llm/index.js';
 import { createMemoryService } from './services/memory/index.js';
 import { createRagService } from './services/rag/index.js';
 import { createEmbeddingProviderFromConfig } from './services/rag/embeddings-sdk.js';
+import { createGeminiResourceSearch } from './services/resources/gemini-grounding.js';
 
 /**
  * Turtle backend entrypoint. Single Node service combining the Voice Gateway (WS) and
@@ -52,7 +53,15 @@ function main(): void {
   // contract gates as every other path.
   const memory = createMemoryService({ repos: store.repos });
   const rag = createRagService({ repos: store.repos, embeddings: createEmbeddingProviderFromConfig(cfg) });
-  const processor = createE2eProcessor({ llm, store, memory, rag, prepWindowHours: cfg.prepWindowHours });
+  const resourceSearch = createGeminiResourceSearch(cfg);
+  const processor = createE2eProcessor({
+    llm,
+    store,
+    memory,
+    rag,
+    prepWindowHours: cfg.prepWindowHours,
+    resourceSearch,
+  });
   createGateway({ cfg, store, asr, tts, processor }).attach(wss);
 
   server.listen(cfg.port, () => {

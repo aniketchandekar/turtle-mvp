@@ -8,6 +8,7 @@ import {
   type Card,
   type CardActionKind,
   type ClientMessage,
+  type OnboardingPrompt,
   type ServerMessage,
   type TurnContract,
 } from '@turtle/shared';
@@ -44,6 +45,8 @@ export interface SessionEvents {
    * transcript (R10.5). Never fires for a card whose utterance was interrupted (barge-in).
    */
   onCard?(card: Card | null): void;
+  /** The server's single active first-run onboarding card. */
+  onOnboardingPrompt?(prompt: OnboardingPrompt): void;
   onError?(code: string, message: string, degraded: boolean): void;
 }
 
@@ -56,10 +59,14 @@ export interface SessionApi {
   capturing: boolean;
   /** Most recent capture error surfaced to the mic indicator (honest failure). */
   micError: string | null;
-  /** Push-to-talk pressed: begin capturing + streaming audio_chunk frames. */
+  /** Begin continuous mic capture + streaming audio chunks. */
   pressStart(): void;
-  /** Push-to-talk released: stop capture and send turn_end. */
+  /** Stop mic capture and commit the spoken turn. */
   pressEnd(): void;
+  /** Toggle continuous mic capture on and off from the voice button. */
+  toggleCapture(): void;
+  /** Unlock browser audio from an intentional first-run gesture. */
+  unlockAudio(): void;
   /** Barge-in during playback. */
   interrupt(): void;
   /** Text fallback when ASR is unavailable. */
@@ -70,6 +77,12 @@ export interface SessionApi {
    * the normal turn pipeline instead, so the tap path only needs to emit this message.
    */
   sendCardAction(cardId: string, kind: CardActionKind): void;
+  /** Submit the value typed into the active onboarding card. */
+  sendOnboardingAnswer(value: string): void;
+  /** Accept the displayed onboarding answer and advance to the next question. */
+  confirmOnboarding(): void;
+  /** Return the active onboarding card to edit mode without saving anything. */
+  editOnboarding(): void;
 }
 
 /**
@@ -168,6 +181,17 @@ export function useSession(events: SessionEvents = {}): SessionApi {
     sendControl({ type: 'turn_end' });
   }, [capture, sendControl]);
 
+  const toggleCapture = useCallback(() => {
+    if (capture.isCapturing()) pressEnd();
+    else pressStart();
+  }, [capture, pressEnd, pressStart]);
+
+  const unlockAudio = useCallback(() => {
+    // Browsers suspend Web Audio until a user gesture. The welcome button is the
+    // clearest, least surprising place to make that gesture count.
+    void playerRef.current?.resume().catch(() => undefined);
+  }, []);
+
   const interrupt = useCallback(() => {
     // Halt local playback immediately, then tell the gateway to flush TTS, discard
     // the partial response, and return to LISTENING (R4.3). The local flush makes the
@@ -206,6 +230,22 @@ export function useSession(events: SessionEvents = {}): SessionApi {
       // server owns the lifecycle transition — the client only reports the tap.
       sendControl({ type: 'card_action', card_id: cardId, kind });
     },
+    [sendControl],
+  );
+
+  const sendOnboardingAnswer = useCallback(
+    (value: string) => {
+      const trimmed = value.trim();
+      if (trimmed) sendControl({ type: 'onboarding_answer', value: trimmed });
+    },
+    [sendControl],
+  );
+  const confirmOnboarding = useCallback(
+    () => sendControl({ type: 'onboarding_confirm' }),
+    [sendControl],
+  );
+  const editOnboarding = useCallback(
+    () => sendControl({ type: 'onboarding_edit' }),
     [sendControl],
   );
 
@@ -342,6 +382,9 @@ export function useSession(events: SessionEvents = {}): SessionApi {
           }
           return;
         }
+        case 'onboarding_prompt':
+          evRef.current.onOnboardingPrompt?.(msg.prompt);
+          return;
         case 'error':
           evRef.current.onError?.(msg.code, msg.message, msg.degraded ?? false);
           return;
@@ -395,8 +438,13 @@ export function useSession(events: SessionEvents = {}): SessionApi {
     micError,
     pressStart,
     pressEnd,
+    toggleCapture,
+    unlockAudio,
     interrupt,
     sendText,
     sendCardAction,
+    sendOnboardingAnswer,
+    confirmOnboarding,
+    editOnboarding,
   };
 }

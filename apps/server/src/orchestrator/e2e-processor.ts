@@ -20,6 +20,8 @@ import { runPrep } from './prep.js';
 import { createMemoryService, type MemoryService } from '../services/memory/index.js';
 import type { RagService } from '../services/rag/index.js';
 import type { Store } from '../store/index.js';
+import type { ResourceSearchService } from '../services/resources/gemini-grounding.js';
+import { runResources, type ResourceRequest } from './resources.js';
 
 /**
  * A zero-key, deterministic orchestrator wiring for end-to-end tests (Task 38).
@@ -88,6 +90,8 @@ export interface E2eProcessorDeps {
   rag?: RagService;
   memory?: MemoryService;
   prepWindowHours?: number;
+  /** Explicit, server-side trusted web resource search. */
+  resourceSearch?: ResourceSearchService;
 }
 
 /**
@@ -101,6 +105,7 @@ export function createE2eProcessor(deps: E2eProcessorDeps = {}): Orchestrator {
   const runOptions = deps.runOptions;
   const memory = deps.memory ?? (deps.store ? createMemoryService({ repos: deps.store.repos }) : null);
   const checkins = new Map<string, ReturnType<typeof createCheckinRunner>>();
+  const pendingResourceRequests = new Map<string, ResourceRequest>();
 
   return {
     async handleTurn({ sessionId, turnId, userText }): Promise<TurnContract> {
@@ -128,8 +133,20 @@ export function createE2eProcessor(deps: E2eProcessorDeps = {}): Orchestrator {
         return finalize(sessionId, turnId, out, 'CLOSING');
       }
 
+      // Resource search is opt-in. A local request first collects a city/ZIP only
+      // for the current search; it is held in this in-memory session map, never in
+      // the patient or caregiver profile.
+      const pendingResourceRequest = pendingResourceRequests.get(sessionId) ?? null;
+      const ruledMode = routeByRules(userText);
+      if (pendingResourceRequest || ruledMode === 'resources') {
+        const resourceTurn = await runResources(userText, deps.resourceSearch, pendingResourceRequest);
+        if (resourceTurn.pending) pendingResourceRequests.set(sessionId, resourceTurn.pending);
+        else pendingResourceRequests.delete(sessionId);
+        return finalize(sessionId, turnId, resourceTurn.output, 'WAITING');
+      }
+
       // 3) Normal routing (safety = none). Rules-first; default check-in.
-      const mode = routeByRules(userText) ?? 'checkin';
+      const mode = ruledMode ?? 'checkin';
       const out = await runMode(mode, userText, {
         llm,
         runOptions,
@@ -158,7 +175,7 @@ export function createE2eProcessor(deps: E2eProcessorDeps = {}): Orchestrator {
  * card; a log RETRIEVAL question with no store returns a warm acknowledgement.
  */
 async function runMode(
-  mode: 'checkin' | 'qa' | 'log' | 'prep',
+  mode: 'checkin' | 'qa' | 'log' | 'prep' | 'resources',
   userText: string,
   ctx: {
     llm: LlmProvider;
@@ -191,6 +208,10 @@ async function runMode(
       if (ctx.repos && ctx.patientId) {
         return runPrep({ repos: ctx.repos, patientId: ctx.patientId, llm: ctx.llm, windowHours: ctx.prepWindowHours, runOptions: ctx.runOptions });
       }
+      return checkinAck(ctx.llm, userText);
+    case 'resources':
+      // Direct resource requests are intercepted above to preserve temporary local
+      // search context. Keep this branch as an honest defensive fallback.
       return checkinAck(ctx.llm, userText);
     case 'checkin':
     default:

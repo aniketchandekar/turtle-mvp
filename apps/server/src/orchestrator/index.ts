@@ -20,7 +20,7 @@ import type { ModeOutput, TurnContract, TurnFlag } from '@turtle/shared';
  */
 
 /** Routable conversation modes (design.md §Orchestrator: small routed prompts). */
-export const MODES = ['checkin', 'qa', 'log', 'prep'] as const;
+export const MODES = ['checkin', 'qa', 'log', 'prep', 'resources'] as const;
 export type Mode = (typeof MODES)[number];
 
 /** Safety classifier verdict. Bias uncertain cases toward flagging. */

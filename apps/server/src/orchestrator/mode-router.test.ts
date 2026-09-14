@@ -105,6 +105,12 @@ describe('routeByRules — deterministic rules-first (design.md §Mode router)',
     expect(routeByRules('What should I expect next?')).toBe('qa');
   });
 
+  it('routes explicit caregiver-resource requests to `resources`', () => {
+    expect(routeByRules('Find caregiver support groups near me')).toBe('resources');
+    expect(routeByRules('I need financial assistance resources')).toBe('resources');
+    expect(routeByRules('Can you find transportation help?')).toBe('resources');
+  });
+
   it('returns null for ambiguous text the rules do not confidently catch', () => {
     expect(routeByRules("I'm feeling really overwhelmed")).toBeNull();
     expect(routeByRules('It was a hard day')).toBeNull();

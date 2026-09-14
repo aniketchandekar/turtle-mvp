@@ -10,28 +10,27 @@ interface Props {
   /** Maps the session state machine to the orb's agent state. */
   agentState: AgentState;
   listening: boolean;
-  onPressStart: () => void;
-  onPressEnd: () => void;
+  onToggleCapture: () => void;
   /** Mic capture error from the session (honest indicator). Overrides the local waveform error. */
   micError?: string | null;
   disabled?: boolean;
   /** The latest gentle prompt, kept visible while the voice-first surface is open. */
   prompt?: string | null;
+  /** Whether a question or action card is currently visible beside the main modal. */
+  hasSideCard?: boolean;
 }
 
 /**
- * ElevenLabs-inspired minimalist Voice Surface:
- * Clean 3D Orb floating on pitch black, minimal typography status indicator,
- * clean audio waveform visualizer, and tactile circular push-to-talk button.
+ * Voice Surface with pure blue 3D Orb, status indicator, waveform, and mic button.
  */
 export function VoiceView({
   agentState,
   listening,
-  onPressStart,
-  onPressEnd,
+  onToggleCapture,
   micError: sessionMicError,
   disabled,
   prompt,
+  hasSideCard = false,
 }: Props) {
   const [waveformError, setWaveformError] = useState<string | null>(null);
   const micError = sessionMicError ?? waveformError;
@@ -52,55 +51,60 @@ export function VoiceView({
   }, []);
 
   return (
-    <div className="flex flex-1 flex-col items-center justify-between py-4 sm:py-6 select-none">
+    <div className="flex flex-1 flex-col items-center justify-between py-2 sm:py-3 select-none overflow-hidden h-full">
       {/* Clean Status Indicator */}
-      <div className="flex items-center justify-center">
+      <div className="flex shrink-0 items-center justify-center pt-1">
         <div
           className={cn(
-            'flex items-center gap-2 rounded-full px-3.5 py-1 text-xs font-medium tracking-wide transition-all duration-200',
-            agentState === 'listening' && 'bg-zinc-900 text-white border border-zinc-700',
-            agentState === 'thinking' && 'bg-zinc-900 text-zinc-300 border border-zinc-700',
-            agentState === 'talking' && 'bg-zinc-900 text-white border border-zinc-700',
-            !agentState && 'text-zinc-500',
+            'flex items-center gap-2 rounded-full px-3.5 py-1 text-[11px] font-bold tracking-wide transition-all duration-200',
+            agentState === 'listening' && 'bg-[#eff6ff] text-[#1d4ed8] border border-[#bfdbfe] shadow-xs',
+            agentState === 'thinking' && 'bg-[#eff6ff] text-[#1d4ed8] border border-[#bfdbfe]',
+            agentState === 'talking' && 'bg-[#fef9c3] text-[#854d0e] border border-[#fef08a] shadow-xs',
+            !agentState && 'text-[#64748b] bg-[#f8fafc] border border-[#e2e8f0]',
           )}
           aria-live="polite"
         >
           {agentState === 'listening' && (
             <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-white" />
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#f59e0b] opacity-75" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-[#f59e0b]" />
             </span>
           )}
           {agentState === 'thinking' && (
-            <Sparkles className="h-3.5 w-3.5 animate-spin text-zinc-300" />
+            <Sparkles className="h-3 w-3 animate-spin text-[#1d4ed8]" />
           )}
           {agentState === 'talking' && (
-            <Volume2 className="h-3.5 w-3.5 animate-pulse text-white" />
+            <Volume2 className="h-3 w-3 animate-pulse text-[#b45309]" />
           )}
           <span>{micError ?? hint}</span>
         </div>
       </div>
 
-      {/* Floating 3D Orb Canvas on Pure Black */}
-      <div className="relative my-auto grid place-items-center">
-        <div className="relative h-64 w-64 sm:h-80 sm:w-80" aria-hidden="true">
-          <Orb agentState={agentState} colors={['#CADCFC', '#A0B9D1']} />
+      {/* Central Interactive Area: Pure Blue Voice Orb Perfectly Centered */}
+      <div className="flex flex-1 flex-col items-center justify-center w-full min-h-0 py-2 sm:py-4 overflow-hidden">
+        {/* 3D Orb Canvas in Pure Shades of Blue */}
+        <div
+          className="relative shrink-0 grid place-items-center h-56 w-56 sm:h-64 sm:w-64 md:h-72 md:w-72 transition-all duration-300"
+          aria-hidden="true"
+        >
+          <Orb agentState={agentState} colors={['#1d4ed8', '#60a5fa']} />
         </div>
-        {prompt ? (
-          <p className="absolute -bottom-8 w-[min(22rem,calc(100vw-3rem))] text-center text-sm leading-relaxed text-zinc-300">
-            {prompt}
+
+        {!hasSideCard && prompt ? (
+          <p className="mt-2 max-w-sm text-center text-xs font-semibold leading-relaxed text-[#475569] px-4 line-clamp-2">
+            “{prompt}”
           </p>
         ) : null}
       </div>
 
-      {/* Bottom Controls: Waveform & Tactile Circular Push-to-Talk Button */}
-      <div className="flex w-full max-w-xs flex-col items-center gap-5">
+      {/* Bottom Controls: Waveform & Tactile Circular Push-to-Talk Button (Always fully visible) */}
+      <div className="flex shrink-0 w-full max-w-xs flex-col items-center gap-2.5 pb-2">
         {/* Clean Audio Waveform */}
-        <div className="h-8 w-full overflow-hidden flex items-center justify-center opacity-80">
+        <div className="h-6 w-full overflow-hidden flex items-center justify-center opacity-90">
           <MicrophoneWaveform
             active={listening}
-            height={28}
-            barColor="#ffffff"
+            height={24}
+            barColor={listening ? '#f59e0b' : '#2563eb'}
             onError={onError}
             className="w-full"
           />
@@ -112,48 +116,26 @@ export function VoiceView({
             type="button"
             disabled={disabled}
             aria-pressed={listening}
-            aria-label={listening ? 'Listening. Release to send.' : 'Press and hold to talk'}
-            onPointerDown={(e) => {
-              e.preventDefault();
-              onPressStart();
-            }}
-            onPointerUp={(e) => {
-              e.preventDefault();
-              onPressEnd();
-            }}
-            onPointerLeave={() => {
-              if (listening) onPressEnd();
-            }}
-            onKeyDown={(e) => {
-              if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) {
-                e.preventDefault();
-                onPressStart();
-              }
-            }}
-            onKeyUp={(e) => {
-              if (e.key === ' ' || e.key === 'Enter') {
-                e.preventDefault();
-                onPressEnd();
-              }
-            }}
+            aria-label={listening ? 'Listening. Tap to stop and send.' : 'Tap to start listening'}
+            onClick={onToggleCapture}
             className={cn(
-              'grid h-16 w-16 place-items-center rounded-full transition-all duration-200',
+              'grid h-14 w-14 sm:h-16 sm:w-16 place-items-center rounded-full transition-all duration-200',
               'touch-none select-none disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer',
               listening
-                ? 'scale-110 bg-white text-black shadow-[0_0_24px_rgba(255,255,255,0.35)]'
-                : 'bg-[#18181b] border border-zinc-700 text-zinc-300 hover:text-white hover:bg-zinc-800 hover:border-zinc-500 active:scale-95 shadow-lg',
+                ? 'scale-105 bg-[#f59e0b] text-[#0b192c] shadow-[0_0_28px_rgba(245,158,11,0.55)] ring-4 ring-blue-500/40'
+                : 'bg-[#1d4ed8] border border-[#1d4ed8] text-white hover:bg-[#1e40af] active:scale-95 shadow-[0_8px_20px_rgba(29,78,216,0.28)]',
             )}
           >
             <Mic
               className={cn(
-                'h-6 w-6 transition-transform duration-150',
-                listening ? 'scale-110 text-black' : 'text-zinc-200',
+                'h-5 w-5 sm:h-6 sm:w-6 transition-transform duration-150',
+                listening ? 'scale-110 text-[#0b192c]' : 'text-white',
               )}
             />
           </button>
 
-          <span className="mt-2.5 text-xs text-zinc-500 font-medium tracking-tight">
-            {listening ? 'Release to finish' : 'Press & hold to speak'}
+          <span className="mt-1.5 text-[11px] text-[#64748b] font-semibold tracking-tight">
+            {listening ? 'Tap to stop & send' : 'Tap to speak'}
           </span>
         </div>
       </div>

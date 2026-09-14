@@ -28,7 +28,7 @@ export function Transcript({ lines }: { lines: TranscriptLine[] }) {
         if (line.speaker === 'system') {
           return (
             <div key={line.id} className="flex justify-center my-1">
-              <span className="rounded-full bg-zinc-900 border border-zinc-800 px-3 py-1 text-xs text-zinc-400">
+              <span className="rounded-full bg-[#eff6ff] border border-[#bfdbfe] px-3.5 py-1 text-xs font-semibold text-[#1d4ed8]">
                 {line.text}
               </span>
             </div>
@@ -49,10 +49,10 @@ export function Transcript({ lines }: { lines: TranscriptLine[] }) {
             {/* Avatar icon */}
             <div
               className={cn(
-                'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs mt-0.5',
+                'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs mt-0.5 shadow-xs',
                 isUser
-                  ? 'bg-zinc-800 text-zinc-300 border border-zinc-700'
-                  : 'bg-zinc-900 text-zinc-400 border border-zinc-800',
+                  ? 'bg-[#1d4ed8] text-white border border-blue-600'
+                  : 'bg-[#eff6ff] text-[#1d4ed8] border border-[#bfdbfe]',
               )}
               aria-hidden="true"
             >
@@ -62,10 +62,10 @@ export function Transcript({ lines }: { lines: TranscriptLine[] }) {
             {/* Message Bubble */}
             <div
               className={cn(
-                'rounded-2xl px-3.5 py-2 text-sm leading-relaxed',
+                'rounded-2xl px-4 py-2.5 text-sm font-medium leading-relaxed shadow-xs',
                 isUser
-                  ? 'bg-zinc-800 text-white rounded-tr-xs'
-                  : 'bg-[#121215] border border-zinc-800/80 text-zinc-100 rounded-tl-xs',
+                  ? 'bg-[#1d4ed8] text-white rounded-tr-xs'
+                  : 'bg-white border border-[#cbd5e1] text-[#0b192c] rounded-tl-xs',
               )}
             >
               <p className="m-0 whitespace-pre-wrap">{line.text}</p>

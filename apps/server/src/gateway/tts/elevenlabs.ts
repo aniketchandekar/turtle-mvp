@@ -7,7 +7,7 @@ import type { TtsCallbacks, TtsProvider, TtsStream } from '../index.js';
  *
  * Turns the orchestrator's `say` text into spoken PCM over a single ElevenLabs
  * stream-input WebSocket, using the frozen Turtle preset (Flash v2.5, pcm_16000,
- * fixed voice, `stability 0.5 / similarity_boost 0.8 / use_speaker_boost false /
+ * fixed voice, `stability 0.35 / similarity_boost 0.8 / use_speaker_boost false /
  * speed 1.0`, `chunk_length_schedule [120,160,250,290]`).
  *
  *   - Each turn's `say` is split into sentences and streamed sentence-by-sentence.

@@ -48,8 +48,9 @@ export const AI_DISCLOSURE = {
   // Short spoken form used as the first-session greeting.
   spoken:
     "Before we start, I want to be honest with you: I'm Turtle, and I'm software — " +
-    "an AI, not a person. I'm here to listen, to help you understand the diagnosis in " +
-    "plain language, to get you ready for appointments, and to keep a simple care log. " +
+    "an AI voice companion for family caregivers, not a person. I'm here to stay with " +
+    "you through the hard days: to listen anytime, help you understand the diagnosis in " +
+    "plain language, get you ready for appointments, and keep a simple care log. " +
     "I will never give medical advice, dosing, or a prognosis — those are for your care " +
     "team. Whenever you're ready, press and hold to talk.",
   // Written form shown during onboarding, broken into the three honesty beats.

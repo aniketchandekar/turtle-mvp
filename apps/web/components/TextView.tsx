@@ -40,7 +40,7 @@ export function TextView({ lines, onSend, disabled, suggestions = [] }: Props) {
               type="button"
               disabled={disabled}
               onClick={() => onSend(suggestion)}
-              className="shrink-0 rounded-full border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-300 transition-colors hover:border-zinc-600 hover:text-white disabled:opacity-50"
+              className="shrink-0 rounded-full border border-[#bfdbfe] bg-[#eff6ff] px-3.5 py-1.5 text-xs font-bold text-[#1d4ed8] transition-all hover:bg-[#dbeafe] hover:border-[#93c5fd] disabled:opacity-50 cursor-pointer shadow-xs"
             >
               {suggestion}
             </button>
@@ -50,7 +50,7 @@ export function TextView({ lines, onSend, disabled, suggestions = [] }: Props) {
 
       {/* Minimalist Message Composer Bar */}
       <form
-        className="mt-2 flex items-center gap-2 rounded-full bg-[#121214] p-1.5 pl-4 border border-zinc-800/90 focus-within:border-zinc-600 transition-colors"
+        className="mt-2 flex items-center gap-2 rounded-full bg-[#f8fafc] p-1.5 pl-4 border border-[#cbd5e1] focus-within:border-[#1d4ed8] focus-within:bg-white shadow-xs transition-colors"
         onSubmit={(e) => {
           e.preventDefault();
           submit();
@@ -67,7 +67,7 @@ export function TextView({ lines, onSend, disabled, suggestions = [] }: Props) {
           onChange={(e) => setValue(e.target.value)}
           placeholder="Ask Turtle or note an update…"
           autoComplete="off"
-          className="flex-1 bg-transparent text-sm text-white placeholder:text-zinc-500 outline-none"
+          className="flex-1 bg-transparent text-sm font-medium text-[#0b192c] placeholder:text-[#94a3b8] outline-none"
         />
         <button
           type="submit"
@@ -76,8 +76,8 @@ export function TextView({ lines, onSend, disabled, suggestions = [] }: Props) {
           className={cn(
             'flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-all duration-150 cursor-pointer',
             value.trim().length > 0
-              ? 'bg-white text-black hover:bg-zinc-200 active:scale-95'
-              : 'bg-zinc-800/80 text-zinc-500 cursor-not-allowed opacity-40',
+              ? 'bg-[#1d4ed8] text-white hover:bg-[#1e40af] active:scale-95 shadow-xs'
+              : 'bg-[#f1f5f9] text-[#94a3b8] cursor-not-allowed opacity-50',
           )}
         >
           <ArrowUp className="h-4 w-4 stroke-[2.5]" />

@@ -21,12 +21,14 @@ interface Props {
   onAction?: (cardId: string, kind: CardActionKind) => void;
   /** The card was dismissed. */
   onDismiss?: (cardId: string) => void;
+  /** Placement is owned by the parent surface (bottom for text, beside the orb for voice). */
+  className?: string;
 }
 
 /**
  * ElevenLabs-style minimalist CardSurface for Actionable, Safety, and Retained cards.
  */
-export function CardSurface({ card, onAction, onDismiss }: Props) {
+export function CardSurface({ card, onAction, onDismiss, className }: Props) {
   const actionRef = useRef<HTMLButtonElement | null>(null);
   const dismissRef = useRef<HTMLButtonElement | null>(null);
 
@@ -50,6 +52,7 @@ export function CardSurface({ card, onAction, onDismiss }: Props) {
   const isSafety = card.type === 'safety';
   const isActionable = card.type === 'actionable';
   const isRetained = card.type === 'retained';
+  const hasLinks = Boolean(card.links?.length);
 
   return (
     <aside
@@ -64,25 +67,26 @@ export function CardSurface({ card, onAction, onDismiss }: Props) {
         }
       }}
       className={cn(
-        'mt-3 rounded-2xl bg-[#121215] border border-zinc-800 p-4 shadow-xl transition-all duration-200 text-white',
-        isSafety && 'border-rose-800/80 bg-[#160c0e]',
+        'w-full max-w-md rounded-[24px] bg-white border border-[#cbd5e1] p-5 shadow-[0_16px_48px_rgba(11,25,44,0.12)] transition-all duration-200 text-[#0b192c]',
+        isSafety && 'border-[#facc15] bg-[#fefce8] shadow-[0_16px_48px_rgba(202,138,4,0.16)]',
+        className,
       )}
     >
       <div className="flex items-start justify-between gap-3 mb-2">
         <div className="flex items-center gap-2">
           <span
             className={cn(
-              'flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-xs font-bold',
-              isSafety && 'bg-rose-500/20 text-rose-400',
-              isActionable && 'bg-zinc-800 text-zinc-300',
-              isRetained && 'bg-zinc-800 text-zinc-300',
+              'flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-xs font-bold',
+              isSafety && 'bg-[#fef08a] text-[#b45309]',
+              isActionable && 'bg-[#eff6ff] text-[#1d4ed8]',
+              isRetained && 'bg-[#eff6ff] text-[#1d4ed8]',
             )}
           >
             {isSafety && <AlertTriangle className="h-3.5 w-3.5" />}
             {isActionable && <Calendar className="h-3.5 w-3.5" />}
             {isRetained && <FileText className="h-3.5 w-3.5" />}
           </span>
-          <h2 id="card-title" className="m-0 text-sm font-semibold text-white">
+          <h2 id="card-title" className="m-0 text-sm font-bold text-[#0b192c]">
             {card.title}
           </h2>
         </div>
@@ -90,15 +94,35 @@ export function CardSurface({ card, onAction, onDismiss }: Props) {
         <button
           onClick={dismiss}
           aria-label={`Dismiss ${card.title}`}
-          className="text-zinc-500 hover:text-white p-1 rounded-md hover:bg-zinc-800 transition-colors"
+          className="text-[#64748b] hover:text-[#0b192c] p-1 rounded-md hover:bg-[#f1f5f9] transition-colors cursor-pointer"
         >
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
 
-      <p id="card-body" className="m-0 mb-3 text-xs text-zinc-400 leading-relaxed pl-8">
+      <p id="card-body" className="m-0 mb-3 text-xs text-[#475569] leading-relaxed pl-8">
         {card.body}
       </p>
+
+      {hasLinks ? (
+        <div className="mb-3 space-y-1.5 pl-8">
+          {card.links!.map((link) => (
+            <a
+              key={link.url}
+              href={link.url}
+              target="_blank"
+              rel="noreferrer"
+              onClick={() => {
+                if (cardId) onAction?.(cardId, 'link');
+              }}
+              className="group flex items-center justify-between gap-3 rounded-lg border border-[#cbd5e1] bg-white px-3 py-1.5 text-xs text-[#0b192c] font-semibold transition hover:border-[#1d4ed8] hover:bg-[#eff6ff]"
+            >
+              <span className="truncate">{link.title}</span>
+              <ExternalLink className="h-3 w-3 shrink-0 text-[#64748b] transition group-hover:text-[#1d4ed8]" aria-hidden="true" />
+            </a>
+          ))}
+        </div>
+      ) : null}
 
       <div className="flex justify-end gap-2 pt-1">
         <button
@@ -106,7 +130,7 @@ export function CardSurface({ card, onAction, onDismiss }: Props) {
           type="button"
           onClick={dismiss}
           disabled={!cardId}
-          className="h-8 rounded-lg bg-zinc-900 border border-zinc-800 px-3 text-xs font-medium text-zinc-400 transition-colors hover:text-white hover:bg-zinc-800 active:scale-95 disabled:opacity-50 cursor-pointer"
+          className="h-8 rounded-lg bg-[#f1f5f9] border border-[#cbd5e1] px-3 text-[11px] font-bold text-[#475569] transition-colors hover:text-[#0b192c] hover:bg-[#e2e8f0] active:scale-95 disabled:opacity-50 cursor-pointer"
         >
           Dismiss
         </button>
@@ -119,10 +143,10 @@ export function CardSurface({ card, onAction, onDismiss }: Props) {
             disabled={!cardId}
             aria-label={actionAriaLabel(card.action.kind, card.title)}
             className={cn(
-              'flex items-center gap-1.5 h-8 rounded-lg px-3.5 text-xs font-semibold transition-colors active:scale-95 disabled:opacity-50 cursor-pointer',
+              'flex items-center gap-1.5 h-8 rounded-lg px-3.5 text-[11px] font-bold transition-all active:scale-95 disabled:opacity-50 cursor-pointer shadow-xs',
               isSafety
-                ? 'bg-rose-600 hover:bg-rose-500 text-white'
-                : 'bg-white text-black hover:bg-zinc-200',
+                ? 'bg-[#f59e0b] hover:bg-[#d97706] text-[#0b192c] shadow-[0_4px_14px_rgba(245,158,11,0.3)]'
+                : 'bg-[#1d4ed8] hover:bg-[#1e40af] text-white',
             )}
           >
             {renderActionIcon(card.action.kind)}

@@ -116,7 +116,7 @@ describe('buildInitFrame — frozen Turtle preset', () => {
     expect(frame.text).toBe(' ');
     expect(frame.voice_settings).toEqual(TTS_PRESET.voice_settings);
     expect(frame.voice_settings).toMatchObject({
-      stability: 0.5,
+      stability: 0.35,
       similarity_boost: 0.8,
       use_speaker_boost: false,
       speed: 1.0,

@@ -225,6 +225,13 @@ const QA_PATTERNS: RegExp[] = [
   /\bmean(s)?\b.*\?/,
 ];
 
+/** Explicit requests for trusted caregiver help, not medical information or triage. */
+const RESOURCE_PATTERNS: RegExp[] = [
+  /\b(find|show|look for|search for|need)\b.*\b(resource|resources|support group|caregiver support|financial help|financial assistance|transportation|lodging|respite)\b/,
+  /\b(support group|caregiver support|financial help|financial assistance|transportation|lodging|respite care)\b/,
+  /\b(near me|nearby|local help|in my area)\b/,
+];
+
 /**
  * Deterministic rules, evaluated in priority order (first match wins).
  *
@@ -247,6 +254,7 @@ const RULES: RoutingRule[] = [
   // via {@link isVisitSummaryDictation}. Retrieval questions fall through to PREP.
   { mode: 'prep', test: (t) => isVisitSummaryDictationText(t) },
   { mode: 'prep', test: (t) => PREP_PATTERNS.some((re) => re.test(t)) },
+  { mode: 'resources', test: (t) => RESOURCE_PATTERNS.some((re) => re.test(t)) },
   { mode: 'qa', test: (t) => QA_PATTERNS.some((re) => re.test(t)) },
 ];
 

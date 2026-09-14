@@ -38,6 +38,7 @@ export interface Capabilities {
   tts: Capability; // ElevenLabs
   llm: Capability; // Gemini / Anthropic / OpenAI (provider-abstracted)
   embeddings: Capability; // Gemini / OpenAI
+  webSearch: Capability; // Gemini grounding with Google Search
 }
 
 /** Which LLM backend powers the orchestrator. Provider-abstracted per tech.md. */
@@ -93,6 +94,8 @@ export interface Config {
     openai: { apiKey?: string; model: string };
   };
   embeddings: { provider: 'gemini' | 'openai' | 'none'; apiKey?: string; model: string };
+  /** Server-only live search. Reuses the Gemini key but degrades independently. */
+  webSearch: { apiKey?: string; model: string };
 
   capabilities: Capabilities;
 }
@@ -162,6 +165,12 @@ export function loadConfig(source: EnvSource = process.env): Config {
         ? envOr('EMBEDDING_MODEL', 'text-embedding-004')
         : envOr('EMBEDDING_MODEL', 'text-embedding-3-small'),
   };
+  const webSearch = {
+    apiKey: geminiKey,
+    // Kept separate from the conversational model so deployments can select a
+    // supported search-grounding model without changing normal conversation.
+    model: envOr('GEMINI_SEARCH_MODEL', gemini.model),
+  };
 
   const capabilities: Capabilities = {
     asr: {
@@ -179,6 +188,10 @@ export function loadConfig(source: EnvSource = process.env): Config {
     embeddings: {
       live: embeddingsProvider !== 'none',
       fallback: 'No embedding key — using lexical (keyword) retrieval over the KB.',
+    },
+    webSearch: {
+      live: Boolean(webSearch.apiKey),
+      fallback: 'Gemini key missing — trusted web resources are unavailable right now.',
     },
   };
 
@@ -209,6 +222,7 @@ export function loadConfig(source: EnvSource = process.env): Config {
       openai,
     },
     embeddings,
+    webSearch,
 
     capabilities,
   };
@@ -238,6 +252,7 @@ export function describeCapabilities(cfg: Config): string[] {
       : `LLM (${cfg.llm.provider} ${cfg.llm.model})`;
   mark(llmName, cfg.capabilities.llm);
   mark(`Embeddings${cfg.embeddings.provider !== 'none' ? ` (${cfg.embeddings.provider})` : ''}`, cfg.capabilities.embeddings);
+  mark(`Web search${cfg.webSearch.apiKey ? ` (${cfg.webSearch.model})` : ''}`, cfg.capabilities.webSearch);
   if (cfg.encryptionKeyIsDev) {
     lines.push('  ! Encryption: using DEV key (set TURTLE_ENCRYPTION_KEY for real use).');
   }

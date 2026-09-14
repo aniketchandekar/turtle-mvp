@@ -22,6 +22,7 @@ describe('loadConfig — zero env vars (R1.2)', () => {
     expect(cfg.capabilities.tts.live).toBe(false);
     expect(cfg.capabilities.llm.live).toBe(false);
     expect(cfg.capabilities.embeddings.live).toBe(false);
+    expect(cfg.capabilities.webSearch.live).toBe(false);
   });
 
   it('surfaces a human-readable fallback for each degraded capability', () => {
@@ -44,6 +45,7 @@ describe('loadConfig — zero env vars (R1.2)', () => {
     expect(cfg.embeddings.apiKey).toBeUndefined();
     expect(cfg.embeddings.provider).toBe('none');
     expect(cfg.elevenlabs.voiceId).toBeUndefined();
+    expect(cfg.webSearch.apiKey).toBeUndefined();
   });
 });
 
@@ -60,6 +62,7 @@ describe('loadConfig — providers live when keys present (R1.2)', () => {
     expect(cfg.capabilities.tts.live).toBe(true);
     expect(cfg.capabilities.llm.live).toBe(true);
     expect(cfg.capabilities.embeddings.live).toBe(true);
+    expect(cfg.capabilities.webSearch.live).toBe(false);
   });
 
   it('marks capabilities independently (partial keys)', () => {
@@ -128,6 +131,7 @@ describe('loadConfig — documented defaults (R1.4)', () => {
     expect(cfg.llm.gemini.model).toBe('gemini-2.5-flash');
     expect(cfg.llm.anthropic.model).toBe('claude-3-5-sonnet-latest');
     expect(cfg.embeddings.model).toBe('text-embedding-3-small');
+    expect(cfg.webSearch.model).toBe('gemini-2.5-flash');
   });
 
   it('applies the frozen ElevenLabs voice settings and chunk schedule', () => {
@@ -158,12 +162,14 @@ describe('loadConfig — documented defaults (R1.4)', () => {
       DEEPGRAM_MODEL: 'nova-custom',
       ELEVENLABS_VOICE_ID: 'voice-xyz',
       ANTHROPIC_MODEL: 'claude-custom',
+      GEMINI_SEARCH_MODEL: 'gemini-search-custom',
       TURTLE_ENCRYPTION_KEY: 'real-secret',
     });
     expect(cfg.port).toBe(9000);
     expect(cfg.deepgram.model).toBe('nova-custom');
     expect(cfg.elevenlabs.voiceId).toBe('voice-xyz');
     expect(cfg.llm.anthropic.model).toBe('claude-custom');
+    expect(cfg.webSearch.model).toBe('gemini-search-custom');
     expect(cfg.encryptionKey).toBe('real-secret');
     expect(cfg.encryptionKeyIsDev).toBe(false);
   });

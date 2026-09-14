@@ -37,8 +37,18 @@ Turtle runs without any API keys. Each missing provider falls back:
 | `ELEVENLABS_API_KEY` | Text-only (no spoken voice) |
 | `ANTHROPIC_API_KEY` | Canned orchestrator replies |
 | `OPENAI_API_KEY` | Lexical (keyword) retrieval over the KB |
+| `GEMINI_API_KEY` | Live trusted-resource search is unavailable; normal local KB still works |
 
 `GET /health` reports which capabilities are live vs degraded.
+
+### Trusted caregiver resources
+
+When a caregiver explicitly asks Turtle to find support groups, financial help,
+transportation, lodging, respite care, or other caregiver resources, the server uses
+Gemini Search grounding and shows up to three cited links from an approved US source
+policy. For a local request, Turtle asks for a city or ZIP and uses it only for that
+search; it is not saved in the care profile. Set `GEMINI_SEARCH_MODEL` only if you
+need a search-grounding model different from `GEMINI_MODEL`.
 
 ## Scripts
 

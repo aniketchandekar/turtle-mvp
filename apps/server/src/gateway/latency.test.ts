@@ -252,6 +252,14 @@ async function makeHarness(): Promise<Harness> {
   await new Promise<void>((resolve) => server.listen(0, resolve));
   const { port } = server.address() as AddressInfo;
   const caregiver = store.repos.caregiver.create({ display_name: 'Alex' });
+  store.repos.caregiver.setConsent(caregiver.id);
+  store.repos.patient.create({
+    caregiver_id: caregiver.id,
+    name: 'Morgan',
+    diagnosis: 'metastatic_cancer',
+    diagnosis_notes: null,
+    care_team: { other: [] },
+  });
   return {
     cfg,
     store,

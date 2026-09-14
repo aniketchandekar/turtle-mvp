@@ -38,15 +38,18 @@ test.beforeEach(async () => {
 /** Complete first-run onboarding (AI disclosure + minimal profile + consent) and Start. */
 async function completeOnboarding(page: Page): Promise<void> {
   await page.goto('/');
+  // The product now opens on a marketing page. Enter the live prototype explicitly
+  // so the voice session never starts unexpectedly while a visitor is reading.
+  await page.getByRole('button', { name: /^try turtle$/i }).click();
   // The onboarding dialog is the first thing shown (R16.10).
   const dialog = page.getByRole('dialog', { name: /welcome to turtle/i });
   await expect(dialog).toBeVisible();
 
+  await dialog.getByRole('button', { name: /set up by typing/i }).click();
   await page.locator('#ob-name').fill('Sam');
   // A care-team contact so the medical refusal names a dialable number.
   await page.locator('#ob-nurse').fill('+1 (555) 123-4567');
-  // Explicit consent, then Start.
-  await page.getByRole('checkbox').check();
+  // Saving the profile records first-run consent, then enters the demo.
   await page.getByRole('button', { name: /^start$/i }).click();
 
   // The main app shell replaces onboarding (the Voice/Text tab switch appears).
@@ -62,7 +65,7 @@ async function openTextMode(page: Page): Promise<void> {
 /** Type a turn and send it. */
 async function say(page: Page, text: string): Promise<void> {
   await page.locator('#text-input').fill(text);
-  await page.getByRole('button', { name: /^send$/i }).click();
+  await page.getByRole('button', { name: /^send message$/i }).click();
 }
 
 test.describe('Turtle E2E — scripted session over the text path', () => {
@@ -72,7 +75,7 @@ test.describe('Turtle E2E — scripted session over the text path', () => {
 
     // The first-run greeting is shown in the transcript. (In dev, React StrictMode may
     // double-invoke the mount effect, rendering the greeting twice; assert the first.)
-    await expect(page.getByText(/turtle is software/i).first()).toBeVisible();
+    await expect(page.getByText(/AI voice companion for family caregivers/i).first()).toBeVisible();
 
     // CHECK-IN — a supportive turn. The assistant replies (contract `say` rendered).
     await say(page, "I'm exhausted and I don't know how much longer I can keep this up.");
@@ -131,6 +134,6 @@ test.describe('Turtle E2E — scripted session over the text path', () => {
     await say(page, 'I just needed to vent for a minute.');
     await expect(page.getByText('I just needed to vent for a minute.')).toBeVisible();
     // No card dialog is present on the surface (safety/actionable/retained all absent).
-    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.locator('aside[role="dialog"]')).toHaveCount(0);
   });
 });

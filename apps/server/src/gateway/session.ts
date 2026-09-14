@@ -5,6 +5,7 @@ import {
   serverMessageSchema,
   type AssistantState,
   type ClientMessage,
+  type OnboardingPrompt,
   type ServerMessage,
   type TurnContract,
 } from '@turtle/shared';
@@ -66,6 +67,17 @@ export class SessionChannel implements SessionChannelHandle {
    * client so the audible response halts immediately rather than trickling on.
    */
   private forwardingAudio = false;
+  /**
+   * Temporary first-run answers. They deliberately live only in this channel until
+   * the caregiver confirms the final review, so an unfinished onboarding never
+   * creates a patient profile.
+   */
+  private onboarding: {
+    step: 'name' | 'name_confirm' | 'diagnosis' | 'diagnosis_confirm';
+    name?: string;
+  } | null = null;
+  /** Serializes spoken onboarding prompts and prevents overlapping TTS turns. */
+  private onboardingSpeech: Promise<void> = Promise.resolve();
 
   /**
    * The conversation state machine (Task 11, R2.1–R2.5/R2.7). It owns the legal
@@ -141,6 +153,16 @@ export class SessionChannel implements SessionChannelHandle {
       case 'text_input':
         this.onTextInput(msg.text);
         return;
+      case 'onboarding_answer':
+        this.send({ type: 'transcript_final', text: msg.value });
+        void this.processOnboardingAnswer(msg.value);
+        return;
+      case 'onboarding_confirm':
+        void this.confirmOnboardingAnswer();
+        return;
+      case 'onboarding_edit':
+        void this.editOnboardingAnswer();
+        return;
       case 'turn_end':
         this.onTurnEnd();
         return;
@@ -175,6 +197,17 @@ export class SessionChannel implements SessionChannelHandle {
     // (no per-turn reconnect — matches the ElevenLabs guidance).
     this.openAsrIfLive();
     this.openTtsIfLive();
+
+    const caregiver = this.deps.store.repos.caregiver.get(session.caregiver_id);
+    const patient = this.deps.store.repos.patient.getByCaregiver(session.caregiver_id);
+    if (!caregiver?.consent_at || !patient) {
+      this.onboarding = { step: 'name' };
+      this.queueOnboardingPrompt({
+        step: 'name',
+        question:
+          "Hi, I'm Turtle, an AI voice companion for family caregivers. I'm here to stay with you through the hard days — listening, helping you prepare, and keeping track of what matters. Before we begin, who are you caring for? You can say it or type it below.",
+      });
+    }
   }
 
   /** Binary PCM audio arriving while push-to-talk is engaged (R3.2). */
@@ -213,6 +246,195 @@ export class SessionChannel implements SessionChannelHandle {
     // it identically to the voice path.
     this.send({ type: 'transcript_final', text });
     void this.processUserTurn(text, null);
+  }
+
+  // ---- First-run onboarding -------------------------------------------------
+
+  /** Route both typed and transcribed answers through the same temporary flow. */
+  private async processOnboardingAnswer(value: string): Promise<void> {
+    if (!this.sessionId || !this.onboarding) return;
+    const answer = value.trim().replace(/\s+/g, ' ');
+    if (!answer) return;
+
+    // A caregiver can start answering while the previous prompt is still playing.
+    // Treat that naturally as a barge-in before moving to the next question.
+    if (this.state === 'SPEAKING') this.onInterrupt();
+    if (this.state === 'WAITING') this.setState('LISTENING');
+    this.setState('THINKING');
+
+    if (this.onboarding.step === 'name') {
+      this.onboarding.name = answer;
+      this.onboarding.step = 'name_confirm';
+      this.queueOnboardingPrompt({
+        step: 'name',
+        question: `I heard “${answer}.” Is that right?`,
+        value: answer,
+        confirmation: true,
+      });
+      return;
+    }
+
+    if (this.onboarding.step === 'name_confirm') {
+      if (isAffirmative(answer)) {
+        await this.confirmOnboardingAnswer();
+        return;
+      }
+      if (isNegative(answer)) {
+        const correction = extractNameCorrection(answer);
+        if (correction) {
+          this.onboarding.name = correction;
+          this.queueOnboardingPrompt({
+            step: 'name',
+            question: `I heard “${correction}.” Is that right?`,
+            value: correction,
+            confirmation: true,
+          });
+          return;
+        }
+        await this.editOnboardingAnswer();
+        return;
+      }
+      // If the caregiver spoke a new name directly while reviewing
+      this.onboarding.name = answer;
+      this.queueOnboardingPrompt({
+        step: 'name',
+        question: `I heard “${answer}.” Is that right?`,
+        value: answer,
+        confirmation: true,
+      });
+      return;
+    }
+
+    if (this.onboarding.step === 'diagnosis') {
+      if (!isSupportedDiagnosis(answer)) {
+        this.queueOnboardingPrompt({
+          step: 'diagnosis',
+          question:
+            'For this Turtle demo, select or say “metastatic cancer” as the primary diagnosis.',
+          choices: ['Metastatic cancer'],
+        });
+        return;
+      }
+      this.onboarding.step = 'diagnosis_confirm';
+      this.queueOnboardingPrompt({
+        step: 'diagnosis',
+        question: 'I have the primary diagnosis as metastatic cancer. Is that right?',
+        value: 'Metastatic cancer',
+        confirmation: true,
+      });
+      return;
+    }
+
+    if (this.onboarding.step === 'diagnosis_confirm') {
+      if (isAffirmative(answer) || isSupportedDiagnosis(answer)) {
+        await this.confirmOnboardingAnswer();
+        return;
+      }
+      if (isNegative(answer)) {
+        await this.editOnboardingAnswer();
+        return;
+      }
+      this.queueOnboardingPrompt({
+        step: 'diagnosis',
+        question:
+          'For this Turtle demo, select or say “metastatic cancer” as the primary diagnosis.',
+        choices: ['Metastatic cancer'],
+      });
+      return;
+    }
+  }
+
+  private async confirmOnboardingAnswer(): Promise<void> {
+    if (!this.sessionId || !this.onboarding) return;
+    if (this.state === 'SPEAKING') this.onInterrupt();
+    if (this.state === 'WAITING') this.setState('LISTENING');
+    this.setState('THINKING');
+
+    if (this.onboarding.step === 'name_confirm') {
+      this.onboarding.step = 'diagnosis';
+      this.queueOnboardingPrompt({
+        step: 'diagnosis',
+        question:
+          'Thank you. What is their primary diagnosis? Turtle currently supports the metastatic cancer care journey.',
+        choices: ['Metastatic cancer'],
+      });
+      return;
+    }
+
+    if (this.onboarding.step !== 'diagnosis_confirm' || !this.onboarding.name) return;
+    const caregiverId = this.deps.store.repos.session.get(this.sessionId)?.caregiver_id;
+    if (!caregiverId) return;
+
+    const caregiver = this.deps.store.repos.caregiver.get(caregiverId);
+    if (!caregiver) this.deps.store.repos.caregiver.create({ id: caregiverId });
+    this.deps.store.repos.caregiver.setConsent(caregiverId);
+    if (!this.deps.store.repos.patient.getByCaregiver(caregiverId)) {
+      this.deps.store.repos.patient.create({
+        caregiver_id: caregiverId,
+        name: this.onboarding.name,
+        diagnosis: 'metastatic_cancer',
+        diagnosis_notes: null,
+        care_team: { other: [] },
+      });
+    }
+    const name = this.onboarding.name;
+    this.onboarding = null;
+    this.queueOnboardingPrompt({
+      step: 'complete',
+      question: `Thank you. I’m ready to support ${name}'s care journey. What feels most important today?`,
+      complete: true,
+    });
+  }
+
+  private async editOnboardingAnswer(): Promise<void> {
+    if (!this.onboarding) return;
+    if (this.state === 'SPEAKING') this.onInterrupt();
+    if (this.state === 'WAITING') this.setState('LISTENING');
+    this.setState('THINKING');
+
+    if (this.onboarding.step === 'name_confirm') {
+      this.onboarding.name = undefined;
+      this.onboarding.step = 'name';
+      this.queueOnboardingPrompt({
+        step: 'name',
+        question: 'Of course. Who are you caring for?',
+      });
+      return;
+    }
+    if (this.onboarding.step === 'diagnosis_confirm') {
+      this.onboarding.step = 'diagnosis';
+      this.queueOnboardingPrompt({
+        step: 'diagnosis',
+        question: 'Of course. What is their primary diagnosis?',
+        choices: ['Metastatic cancer'],
+      });
+    }
+  }
+
+  /** Send the single active card now, then speak the same prompt through Turtle. */
+  private queueOnboardingPrompt(prompt: OnboardingPrompt): void {
+    this.send({ type: 'onboarding_prompt', prompt });
+    const sessionId = this.sessionId;
+    if (!sessionId) return;
+    const contract: TurnContract = {
+      session_id: sessionId,
+      turn_id: crypto.randomUUID(),
+      state: 'WAITING',
+      say: prompt.question,
+      cards: [],
+      memory_ops: [],
+      flags: ['none'],
+    };
+    this.onboardingSpeech = this.onboardingSpeech
+      .catch(() => undefined)
+      .then(async () => {
+        if (this.closed) return;
+        // The initial greeting begins from LISTENING; later queued prompts normally
+        // begin from WAITING once the previous utterance has finished.
+        if (this.state === 'WAITING') this.setState('LISTENING');
+        if (this.state === 'LISTENING') this.setState('THINKING');
+        await this.deliver(contract);
+      });
   }
 
   /**
@@ -276,6 +498,24 @@ export class SessionChannel implements SessionChannelHandle {
    */
   private async processUserTurn(userText: string, asrConf: number | null): Promise<void> {
     if (!this.sessionId) return;
+    if (this.onboarding) {
+      // The web experience also offers a form fallback. That path persists consent
+      // and the patient profile over REST while this socket remains open, so re-read
+      // the source of truth before treating the next message as an onboarding answer.
+      const activeSession = this.deps.store.repos.session.get(this.sessionId);
+      const caregiver = activeSession
+        ? this.deps.store.repos.caregiver.get(activeSession.caregiver_id)
+        : null;
+      const patient = activeSession
+        ? this.deps.store.repos.patient.getByCaregiver(activeSession.caregiver_id)
+        : null;
+      if (caregiver?.consent_at && patient) {
+        this.onboarding = null;
+      } else {
+        await this.processOnboardingAnswer(userText);
+        return;
+      }
+    }
     const sessionId = this.sessionId;
     const turnId = crypto.randomUUID();
     this.currentTurnId = turnId;
@@ -695,4 +935,115 @@ function fallbackContract(sessionId: string, turnId: string): TurnContract {
     memory_ops: [],
     flags: ['none'],
   };
+}
+
+/** Turtle's current MVP knowledge base is scoped to the metastatic cancer journey. */
+export function isSupportedDiagnosis(value: string): boolean {
+  const normalized = value.toLowerCase().replace(/[-_]/g, ' ').replace(/\s+/g, ' ').trim();
+  return normalized.includes('metastatic') || normalized.includes('cancer');
+}
+
+/** Check if user utterance indicates confirmation / affirmation. */
+export function isAffirmative(text: string): boolean {
+  const normalized = text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const exactAffirmatives = [
+    'yes',
+    'yeah',
+    'yep',
+    'yup',
+    'yea',
+    'aye',
+    'thats right',
+    'that is right',
+    'thats correct',
+    'that is correct',
+    'correct',
+    'confirm',
+    'sure',
+    'sounds good',
+    'right',
+    'it is',
+    'yes it is',
+    'yes please',
+    'correct please',
+    'exactly',
+    'perfect',
+    'good',
+    'okay',
+    'ok',
+    'looks good',
+    'all good',
+    'yes that is right',
+    'yes thats right',
+    'confirmed',
+  ];
+  if (exactAffirmatives.includes(normalized)) return true;
+  if (/^(yes|yeah|yep|yup|sure|correct|confirm|right)\b/.test(normalized)) return true;
+  if (
+    /\b(that is right|thats right|thats correct|that is correct|is correct|sounds good|looks good)\b/.test(
+      normalized,
+    )
+  )
+    return true;
+  return false;
+}
+
+/** Check if user utterance indicates rejection / desire to edit. */
+export function isNegative(text: string): boolean {
+  const normalized = text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const exactNegatives = [
+    'no',
+    'nope',
+    'nah',
+    'wrong',
+    'thats wrong',
+    'that is wrong',
+    'incorrect',
+    'not right',
+    'change',
+    'edit',
+    'no wait',
+    'cancel',
+    'redo',
+  ];
+  if (exactNegatives.includes(normalized)) return true;
+  if (/^(no|nope|nah|wrong|incorrect|change|edit)\b/.test(normalized)) return true;
+  return false;
+}
+
+/** Extract a new corrected name if user provides one in the confirmation step. */
+export function extractNameCorrection(text: string): string | null {
+  const trimmed = text.trim();
+  const match = trimmed.match(
+    /^(?:no[,.\s]+)?(?:it's|its|her name is|his name is|their name is|my|actually|change to|it is)?\s*([a-zA-Z0-9\s'-]+)$/i,
+  );
+  if (match && match[1]) {
+    const candidate = match[1].trim();
+    if (
+      candidate &&
+      ![
+        'no',
+        'nope',
+        'nah',
+        'wrong',
+        'change',
+        'edit',
+        'cancel',
+        'redo',
+        'incorrect',
+        'not right',
+      ].includes(candidate.toLowerCase())
+    ) {
+      return candidate;
+    }
+  }
+  return null;
 }

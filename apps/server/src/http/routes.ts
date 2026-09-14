@@ -123,6 +123,29 @@ export function createRoutes(cfg: Config, store: Store): Router {
     return p ? res.json(p) : res.status(404).json({ error: 'not found' });
   });
 
+  // PATCH /patients/:id — edits the existing care profile in place. The browser's
+  // Care Profile form uses this instead of POSTing a second patient row.
+  const patchPatientSchema = z.object({
+    name: z.string().min(1),
+    diagnosis: z.enum(DIAGNOSES),
+    diagnosis_notes: z.string().nullish(),
+    care_team: z.record(z.unknown()).optional(),
+  });
+  r.patch('/patients/:id', (req, res) => {
+    const parsed = patchPatientSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    const existing = repos.patient.get(req.params.id);
+    if (!existing) return res.status(404).json({ error: 'not found' });
+    const updated = repos.patient.update(req.params.id, {
+      name: parsed.data.name,
+      diagnosis: parsed.data.diagnosis,
+      diagnosis_notes: parsed.data.diagnosis_notes ?? existing.diagnosis_notes,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      care_team: (parsed.data.care_team as any) ?? existing.care_team,
+    });
+    return res.json(updated);
+  });
+
   // ---- Appointments ----
   const createApptSchema = z.object({
     patient_id: z.string().min(1),

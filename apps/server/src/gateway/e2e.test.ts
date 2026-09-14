@@ -109,6 +109,14 @@ async function makeHarness(withTts: boolean): Promise<Harness> {
   await new Promise<void>((resolve) => server.listen(0, resolve));
   const { port } = server.address() as AddressInfo;
   const caregiver = store.repos.caregiver.create({ display_name: 'Alex' });
+  store.repos.caregiver.setConsent(caregiver.id);
+  store.repos.patient.create({
+    caregiver_id: caregiver.id,
+    name: 'Morgan',
+    diagnosis: 'metastatic_cancer',
+    diagnosis_notes: null,
+    care_team: { other: [] },
+  });
   return { cfg, store, server, wss, url: `ws://127.0.0.1:${port}/ws`, caregiverId: caregiver.id, tts };
 }
 
