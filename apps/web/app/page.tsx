@@ -9,8 +9,6 @@ import {
   ChevronRight,
   FileText,
   GraduationCap,
-  Heart,
-  HeartHandshake,
   Mic2,
   PhoneCall,
   ShieldCheck,
@@ -30,6 +28,7 @@ import { Onboarding } from '@/components/Onboarding';
 import { OnboardingCard } from '@/components/OnboardingCard';
 import { useSession } from '@/lib/useSession';
 import { Orb, type AgentState } from '@/components/ui/orb';
+import { TurtleLogo } from '@/components/TurtleLogo';
 import { cn } from '@/lib/utils';
 
 type Mode = 'voice' | 'text';
@@ -89,8 +88,8 @@ export default function Home() {
     <main className="marketing-page min-h-screen overflow-hidden bg-white text-[#0b192c]">
       <header className="relative z-20 mx-auto flex w-full max-w-[1180px] items-center justify-between px-5 py-5 sm:px-8 lg:px-10">
         <a href="#top" className="flex items-center gap-2.5 text-[#0b192c] no-underline" aria-label="Turtle home">
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-[#1d4ed8] text-white shadow-sm shadow-blue-500/20">
-            <Heart className="h-4 w-4 fill-[#fbbf24] text-[#fbbf24]" strokeWidth={2.2} />
+          <span className="grid h-9 w-9 place-items-center rounded-xl bg-[#1d4ed8] text-[#fbbf24] shadow-sm shadow-blue-500/20">
+            <TurtleLogo className="h-5 w-5 fill-current" />
           </span>
           <span className="text-xl font-extrabold tracking-tight text-[#0b192c]">Turtle</span>
         </a>
@@ -110,19 +109,19 @@ export default function Home() {
         </button>
       </header>
 
-      <section id="top" className="relative mx-auto grid min-h-[720px] w-full max-w-[1260px] items-center gap-10 px-5 pb-20 pt-12 sm:px-8 lg:grid-cols-[1.04fr_0.96fr] lg:px-10 lg:pb-24 lg:pt-16">
+      <section id="top" className="relative mx-auto grid min-h-[640px] w-full max-w-[1260px] items-center gap-8 px-5 pb-12 pt-8 sm:px-8 lg:grid-cols-[1.08fr_0.92fr] lg:px-10 lg:pb-16 lg:pt-10">
         <div className="relative z-10 max-w-2xl marketing-reveal">
-          <p className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#bfdbfe] bg-[#eff6ff] px-4 py-2 text-[11px] font-extrabold uppercase tracking-[0.16em] text-[#1d4ed8]">
+          <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-[#bfdbfe] bg-[#eff6ff] px-4 py-2 text-[11px] font-extrabold uppercase tracking-[0.16em] text-[#1d4ed8]">
             <span className="h-2 w-2 rounded-full bg-[#f59e0b] shadow-[0_0_8px_rgba(245,158,11,0.6)]" /> For family caregivers navigating cancer
           </p>
-          <h1 className="m-0 text-[clamp(3.2rem,7.5vw,6.5rem)] font-extrabold leading-[0.95] tracking-[-0.04em] text-[#0b192c]">
+          <h1 className="m-0 text-[clamp(3rem,5.6vw,5.4rem)] font-extrabold leading-[0.92] tracking-[-0.04em] text-[#0b192c]">
             Caregiving is hard.
-            <span className="mt-3 block text-[#1d4ed8]">You shouldn’t do it alone.</span>
+            <span className="mt-2 block text-[#1d4ed8]">You shouldn’t do it alone.</span>
           </h1>
-          <p className="mt-8 max-w-xl text-lg leading-8 text-[#475569] sm:text-xl font-normal">
+          <p className="mt-6 max-w-xl text-lg leading-7 text-[#475569] sm:text-xl font-normal">
             Turtle is an AI voice companion for the family caregivers of people with cancer—here to call, listen, coach, organize, and stay through every phase of care.
           </p>
-          <div className="mt-9 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
+          <div className="mt-7 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
             <button
               type="button"
               onClick={() => setDemoOpen(true)}
@@ -145,21 +144,21 @@ export default function Home() {
             <p className="mt-1 m-0 text-sm font-bold text-[#713f12]">“How are you doing today?”</p>
           </div>
 
-          <div className="relative z-10 w-[88%] max-w-[470px] overflow-hidden rounded-[32px] border border-blue-900/40 bg-[#0b192c] p-5 text-white shadow-[0_40px_90px_rgba(11,25,44,0.35)] sm:p-7">
+          <div className="relative z-10 w-[88%] max-w-[470px] overflow-hidden rounded-[32px] border border-blue-900/50 bg-[#0b192c] p-5 text-white shadow-[0_40px_90px_rgba(11,25,44,0.45)] sm:p-7">
             <div className="flex items-center justify-between">
               <span className="rounded-full border border-blue-400/30 bg-blue-500/10 px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-[0.16em] text-blue-300">Voice companion</span>
-              <span className="flex items-center gap-1.5 text-xs font-semibold text-blue-100"><Volume2 className="h-3.5 w-3.5 animate-pulse text-[#fbbf24]" /> Turtle is speaking</span>
+              <span className="flex items-center gap-1.5 text-xs font-semibold text-blue-200"><Volume2 className="h-3.5 w-3.5 animate-pulse text-[#fbbf24]" /> Turtle is speaking</span>
             </div>
 
             {/* Seamless White Fluid Orb with No Outer Stroke */}
-            <div className="relative mx-auto my-6 grid h-48 w-48 sm:h-56 sm:w-56 place-items-center overflow-hidden rounded-full shadow-[0_0_60px_rgba(255,255,255,0.22)]" aria-hidden="true">
+            <div className="relative left-1/2 my-6 h-48 w-48 -translate-x-1/2 overflow-hidden rounded-full bg-[#0b192c] shadow-[0_0_60px_rgba(255,255,255,0.22)] sm:h-56 sm:w-56" aria-hidden="true">
               <Orb
                 agentState="talking"
                 colors={['#ffffff', '#ffffff']}
                 inverted={true}
                 bgColor="#0b192c"
                 seed={11}
-                className="relative h-full w-full"
+                className="absolute inset-0 h-full w-full"
               />
             </div>
 
@@ -255,7 +254,9 @@ export default function Home() {
       </section>
 
       <section className="px-5 pb-24 pt-8 text-center sm:px-8 lg:pb-32">
-        <HeartHandshake className="mx-auto h-10 w-10 text-[#1d4ed8]" />
+        <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-[#eff6ff] text-[#1d4ed8] shadow-xs">
+          <TurtleLogo className="h-8 w-8 fill-current text-[#1d4ed8]" />
+        </span>
         <h2 className="mx-auto mt-6 max-w-3xl text-4xl font-extrabold leading-[1.08] tracking-[-0.03em] sm:text-5xl text-[#0b192c]">Try the companion we’re building for caregivers.</h2>
         <p className="mx-auto mt-6 max-w-xl text-base leading-7 text-[#475569]">Talk naturally, prepare for a visit, log a care update, or ask Turtle to explain metastatic cancer in plain language.</p>
         <button type="button" onClick={() => setDemoOpen(true)} className="mt-8 inline-flex h-14 items-center gap-3 rounded-full bg-[#1d4ed8] px-8 text-base font-bold text-white shadow-[0_12px_32px_rgba(29,78,216,0.3)] transition hover:-translate-y-1 hover:bg-[#1e40af] cursor-pointer">
@@ -264,8 +265,13 @@ export default function Home() {
       </section>
 
       <footer className="border-t border-[#e2e8f0] bg-white px-5 py-8 sm:px-8">
-        <div className="mx-auto flex max-w-[1180px] flex-col justify-between gap-4 text-xs text-[#64748b] sm:flex-row">
-          <span className="font-extrabold text-[#0b192c]">Turtle</span>
+        <div className="mx-auto flex max-w-[1180px] flex-col items-center justify-between gap-4 text-xs text-[#64748b] sm:flex-row">
+          <a href="#top" className="inline-flex items-center gap-2 text-[#0b192c] no-underline" aria-label="Turtle home">
+            <span className="grid h-7 w-7 place-items-center rounded-lg bg-[#1d4ed8] text-[#fbbf24]">
+              <TurtleLogo className="h-4 w-4 fill-current" />
+            </span>
+            <span className="font-extrabold text-sm text-[#0b192c]">Turtle</span>
+          </a>
           <span>Prototype for testing · Not medical or legal advice</span>
           <span>Made for the people who care</span>
         </div>
@@ -425,6 +431,9 @@ function TurtleDemo({ onClose }: { onClose: () => void }) {
         >
           <header className="flex shrink-0 items-center justify-between py-2 pr-12 border-b border-[#f1f5f9] mb-1">
             <div className="flex items-center gap-2.5">
+              <span className="grid h-8 w-8 place-items-center rounded-xl bg-[#1d4ed8] text-[#fbbf24] shadow-xs">
+                <TurtleLogo className="h-4.5 w-4.5 fill-current" />
+              </span>
               <span className="text-xl font-extrabold tracking-tight text-[#0b192c]">Turtle</span>
               <span className="rounded-full border border-[#bfdbfe] bg-[#eff6ff] px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#1d4ed8]">Live demo</span>
             </div>

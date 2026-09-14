@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 import { DIAGNOSES, type Diagnosis } from '@turtle/shared';
 import type { Disclosure, OnboardingSubmission, PatientInfo } from '@/lib/useOnboarding';
 import { PrivacyControls } from '@/components/PrivacyControls';
-import { ArrowLeft, ArrowRight, HeartHandshake, Keyboard, Mic, X } from 'lucide-react';
+import { TurtleLogo } from '@/components/TurtleLogo';
+import { ArrowLeft, ArrowRight, Keyboard, Mic, X } from 'lucide-react';
 
 interface Props {
   isOpen: boolean;
@@ -106,7 +107,7 @@ export function Onboarding({
         <div className="flex items-center justify-between border-b border-[#e2e8f0] pb-4 mb-4">
           <div className="flex items-start gap-3">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#eff6ff] text-[#1d4ed8]">
-              <HeartHandshake className="h-5 w-5" />
+              <TurtleLogo className="h-6 w-6 fill-current text-[#1d4ed8]" />
             </span>
             <div>
               <h2 id="profile-drawer-title" className="text-2xl font-extrabold tracking-tight text-[#0b192c] m-0">
