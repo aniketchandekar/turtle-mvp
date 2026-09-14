@@ -15,6 +15,8 @@ interface Props {
   /** Mic capture error from the session (honest indicator). Overrides the local waveform error. */
   micError?: string | null;
   disabled?: boolean;
+  /** The latest gentle prompt, kept visible while the voice-first surface is open. */
+  prompt?: string | null;
 }
 
 /**
@@ -29,6 +31,7 @@ export function VoiceView({
   onPressEnd,
   micError: sessionMicError,
   disabled,
+  prompt,
 }: Props) {
   const [waveformError, setWaveformError] = useState<string | null>(null);
   const micError = sessionMicError ?? waveformError;
@@ -83,6 +86,11 @@ export function VoiceView({
         <div className="relative h-64 w-64 sm:h-80 sm:w-80" aria-hidden="true">
           <Orb agentState={agentState} colors={['#CADCFC', '#A0B9D1']} />
         </div>
+        {prompt ? (
+          <p className="absolute -bottom-8 w-[min(22rem,calc(100vw-3rem))] text-center text-sm leading-relaxed text-zinc-300">
+            {prompt}
+          </p>
+        ) : null}
       </div>
 
       {/* Bottom Controls: Waveform & Tactile Circular Push-to-Talk Button */}

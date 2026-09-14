@@ -11,6 +11,9 @@ import { createElevenLabsProvider } from './gateway/tts/elevenlabs-sdk.js';
 import { createE2eProcessor } from './orchestrator/index.js';
 import { createGeminiChatStream } from './services/llm/gemini.js';
 import { createLlmProvider } from './services/llm/index.js';
+import { createMemoryService } from './services/memory/index.js';
+import { createRagService } from './services/rag/index.js';
+import { createEmbeddingProviderFromConfig } from './services/rag/embeddings-sdk.js';
 
 /**
  * Turtle backend entrypoint. Single Node service combining the Voice Gateway (WS) and
@@ -44,7 +47,12 @@ function main(): void {
   // contract path as every other turn. Other provider selections still degrade to the
   // canned provider until their concrete adapters are added.
   const llm = createLlmProvider(cfg, cfg.llm.provider === 'gemini' ? createGeminiChatStream : undefined);
-  const processor = createE2eProcessor({ llm });
+  // The local demo uses the real profile, memory, and diagnosis-scoped knowledge base
+  // rather than the old zero-dependency test stub. It still keeps the same safety and
+  // contract gates as every other path.
+  const memory = createMemoryService({ repos: store.repos });
+  const rag = createRagService({ repos: store.repos, embeddings: createEmbeddingProviderFromConfig(cfg) });
+  const processor = createE2eProcessor({ llm, store, memory, rag, prepWindowHours: cfg.prepWindowHours });
   createGateway({ cfg, store, asr, tts, processor }).attach(wss);
 
   server.listen(cfg.port, () => {

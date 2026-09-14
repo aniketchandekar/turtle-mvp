@@ -1,6 +1,7 @@
 import { QA_DECLINE_LINE, modeOutputSchema, type Diagnosis, type ModeOutput } from '@turtle/shared';
 import type { LlmMessage, LlmProvider, LlmRunOptions } from '../services/llm/index.js';
 import { runMode } from '../services/llm/index.js';
+import { PARK_THE_TURN_SAY } from '../services/llm/index.js';
 import type { MemoryService } from '../services/memory/index.js';
 import type { RagService, RetrievedChunk } from '../services/rag/index.js';
 import { DEFAULT_K } from '../services/rag/index.js';
@@ -168,6 +169,21 @@ export async function runQa(userText: string, deps: QaDeps): Promise<QaRunResult
   ];
   const raw = await runMode(llm, messages, runOptions);
 
+  // A provider/JSON-contract hiccup should not erase a relevant, curated source.
+  // Keep the demo useful while staying grounded: quote one short source sentence,
+  // rather than inventing an answer or sending the caregiver into a retry loop.
+  if (raw.say.trim() === PARK_THE_TURN_SAY) {
+    return {
+      output: modeOutputSchema.parse({
+        say: `${firstSourceSentence(chunks[0]!.text)} (source: ${chunks[0]!.id})`,
+        cards: [],
+        memory_ops: [],
+        flags: ['none'],
+      }),
+      retrievedChunkIds,
+    };
+  }
+
   // (R8.4) Post-hoc grounding check: drop ungrounded sentences; fully ungrounded →
   // decline line. Then validate before speaking.
   const grounded = groundAnswer(raw.say, chunks);
@@ -178,6 +194,11 @@ export async function runQa(userText: string, deps: QaDeps): Promise<QaRunResult
     flags: ['none'],
   });
   return { output, retrievedChunkIds };
+}
+
+function firstSourceSentence(text: string): string {
+  const sentence = text.replace(/\s+/g, ' ').trim().match(/^.*?[.!?](?:\s|$)/)?.[0] ?? text.trim();
+  return sentence.length <= 220 ? sentence : `${sentence.slice(0, 217).trimEnd()}…`;
 }
 
 /**

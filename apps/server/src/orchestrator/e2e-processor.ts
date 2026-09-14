@@ -13,8 +13,13 @@ import { composeCrisisResponse, assertCrisisSpokenAndShown } from './crisis.js';
 import { routeByRules, isLogRetrievalQuery } from './mode-router.js';
 import { checkinOpener } from './checkin.js';
 import { runLog } from './log.js';
-import { qaDecline } from './qa.js';
+import { qaDecline, runQa } from './qa.js';
 import { runRecap, isClosingPhrase } from './recap.js';
+import { createCheckinRunner, createSuggestionBudget } from './checkin.js';
+import { runPrep } from './prep.js';
+import { createMemoryService, type MemoryService } from '../services/memory/index.js';
+import type { RagService } from '../services/rag/index.js';
+import type { Store } from '../store/index.js';
 
 /**
  * A zero-key, deterministic orchestrator wiring for end-to-end tests (Task 38).
@@ -74,6 +79,15 @@ export interface E2eProcessorDeps {
   llm?: LlmProvider;
   /** Timeout/timer knobs forwarded to the mode runners. Injectable for tests. */
   runOptions?: LlmRunOptions;
+  /**
+   * Optional live data dependencies. Supplying these turns the deterministic test
+   * processor into the local caregiver demo: Q&A can use the KB and check-ins can
+   * use the saved care profile and recent-session context.
+   */
+  store?: Store;
+  rag?: RagService;
+  memory?: MemoryService;
+  prepWindowHours?: number;
 }
 
 /**
@@ -85,20 +99,25 @@ export function createE2eProcessor(deps: E2eProcessorDeps = {}): Orchestrator {
   const careTeam = deps.careTeam ?? null;
   const llm = deps.llm ?? createCannedLlmProvider();
   const runOptions = deps.runOptions;
+  const memory = deps.memory ?? (deps.store ? createMemoryService({ repos: deps.store.repos }) : null);
+  const checkins = new Map<string, ReturnType<typeof createCheckinRunner>>();
 
   return {
     async handleTurn({ sessionId, turnId, userText }): Promise<TurnContract> {
+      const session = deps.store?.repos.session.get(sessionId);
+      const patient = session ? deps.store?.repos.patient.getByCaregiver(session.caregiver_id) : null;
+      const activeCareTeam = patient?.care_team ?? careTeam;
       // 1) SAFETY FIRST — on the raw text, before any routing (R5.1).
       const verdict = classifySafety(userText);
       if (verdict === 'crisis') {
-        const out = composeCrisisResponse(careTeam);
+        const out = composeCrisisResponse(activeCareTeam);
         // Belt-and-suspenders: never ship a card-only / spoken-only crisis turn (R13.5).
         assertCrisisSpokenAndShown(out);
         // Crisis does NOT continue normal conversation; it settles to WAITING (R13.1).
         return finalize(sessionId, turnId, out, 'WAITING');
       }
       if (verdict === 'medical') {
-        const out = composeMedicalRefusal(careTeam);
+        const out = composeMedicalRefusal(activeCareTeam);
         assertSpokenAndShown(out);
         return finalize(sessionId, turnId, out, 'WAITING');
       }
@@ -111,7 +130,19 @@ export function createE2eProcessor(deps: E2eProcessorDeps = {}): Orchestrator {
 
       // 3) Normal routing (safety = none). Rules-first; default check-in.
       const mode = routeByRules(userText) ?? 'checkin';
-      const out = await runMode(mode, userText, { llm, runOptions });
+      const out = await runMode(mode, userText, {
+        llm,
+        runOptions,
+        caregiverId: session?.caregiver_id,
+        patientId: patient?.id,
+        careTeam: activeCareTeam,
+        memory,
+        rag: deps.rag,
+        repos: deps.store?.repos,
+        prepWindowHours: deps.prepWindowHours,
+        checkins,
+        sessionId,
+      });
       return finalize(sessionId, turnId, out, 'WAITING');
     },
   };
@@ -129,11 +160,27 @@ export function createE2eProcessor(deps: E2eProcessorDeps = {}): Orchestrator {
 async function runMode(
   mode: 'checkin' | 'qa' | 'log' | 'prep',
   userText: string,
-  ctx: { llm: LlmProvider; runOptions?: LlmRunOptions },
+  ctx: {
+    llm: LlmProvider;
+    runOptions?: LlmRunOptions;
+    caregiverId?: string;
+    patientId?: string;
+    careTeam: CareTeam | null;
+    memory: MemoryService | null;
+    rag?: RagService;
+    repos?: Store['repos'];
+    prepWindowHours?: number;
+    checkins: Map<string, ReturnType<typeof createCheckinRunner>>;
+    sessionId: string;
+  },
 ): Promise<ModeOutput> {
   switch (mode) {
     case 'qa':
-      // No KB wired → grounded behavior is the decline line (R8.3), never a guess.
+      // The local demo uses the same diagnosis-scoped RAG runner as production. Keep
+      // the conservative decline only when a profile/KB is genuinely unavailable.
+      if (ctx.rag && ctx.memory && ctx.caregiverId) {
+        return (await runQa(userText, { llm: ctx.llm, rag: ctx.rag, memory: ctx.memory, caregiverId: ctx.caregiverId, runOptions: ctx.runOptions })).output;
+      }
       return qaDecline();
     case 'log':
       // A log RETRIEVAL question has no store to read here; answer warmly via check-in
@@ -141,10 +188,26 @@ async function runMode(
       if (isLogRetrievalQuery(userText)) return checkinAck(ctx.llm, userText);
       return runLog(userText, { llm: ctx.llm, runOptions: ctx.runOptions });
     case 'prep':
-      // No appointment store wired → nothing to brief; acknowledge warmly.
+      if (ctx.repos && ctx.patientId) {
+        return runPrep({ repos: ctx.repos, patientId: ctx.patientId, llm: ctx.llm, windowHours: ctx.prepWindowHours, runOptions: ctx.runOptions });
+      }
       return checkinAck(ctx.llm, userText);
     case 'checkin':
     default:
+      if (ctx.memory && ctx.caregiverId) {
+        let runner = ctx.checkins.get(ctx.sessionId);
+        if (!runner) {
+          runner = createCheckinRunner({
+            llm: ctx.llm,
+            memory: ctx.memory,
+            caregiverId: ctx.caregiverId,
+            suggestionBudget: createSuggestionBudget(),
+            runOptions: ctx.runOptions,
+          });
+          ctx.checkins.set(ctx.sessionId, runner);
+        }
+        return runner.run(userText);
+      }
       return checkinAck(ctx.llm, userText);
   }
 }

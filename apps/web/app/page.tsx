@@ -17,6 +17,13 @@ import { User } from 'lucide-react';
 
 type Mode = 'voice' | 'text';
 
+const CAREGIVER_STARTERS = [
+  'What can you help me with today?',
+  'I want to log an update.',
+  'Help me prepare for our next visit.',
+  'What does metastatic cancer mean?',
+] as const;
+
 /** Map the server assistant state machine to the orb's visual agent state. */
 function toAgentState(state: AssistantState, capturing: boolean): AgentState {
   if (capturing || state === 'LISTENING') return 'listening';
@@ -95,6 +102,10 @@ export default function Home() {
   const agentState = useMemo(
     () => toAgentState(session.assistantState, session.capturing),
     [session.assistantState, session.capturing],
+  );
+  const latestAssistantPrompt = useMemo(
+    () => [...lines].reverse().find((line) => line.speaker === 'assistant')?.text ?? null,
+    [lines],
   );
 
   const onSendText = useCallback(
@@ -178,9 +189,10 @@ export default function Home() {
             micError={session.micError}
             onPressStart={session.pressStart}
             onPressEnd={session.pressEnd}
+            prompt={latestAssistantPrompt}
           />
         ) : (
-          <TextView lines={lines} onSend={onSendText} />
+          <TextView lines={lines} onSend={onSendText} suggestions={CAREGIVER_STARTERS} />
         )}
       </div>
 

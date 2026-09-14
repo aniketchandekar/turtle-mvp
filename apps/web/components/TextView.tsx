@@ -9,12 +9,13 @@ interface Props {
   lines: TranscriptLine[];
   onSend: (text: string) => void;
   disabled?: boolean;
+  suggestions?: readonly string[];
 }
 
 /**
  * ElevenLabs-style minimalist Text View with sleek transcript and rounded input bar.
  */
-export function TextView({ lines, onSend, disabled }: Props) {
+export function TextView({ lines, onSend, disabled, suggestions = [] }: Props) {
   const [value, setValue] = useState('');
 
   const submit = () => {
@@ -30,6 +31,22 @@ export function TextView({ lines, onSend, disabled }: Props) {
       <div className="flex-1 overflow-y-auto px-1 py-3">
         <Transcript lines={lines} />
       </div>
+
+      {suggestions.length > 0 ? (
+        <div className="mb-2 flex gap-2 overflow-x-auto pb-1" aria-label="Conversation starters">
+          {suggestions.map((suggestion) => (
+            <button
+              key={suggestion}
+              type="button"
+              disabled={disabled}
+              onClick={() => onSend(suggestion)}
+              className="shrink-0 rounded-full border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-300 transition-colors hover:border-zinc-600 hover:text-white disabled:opacity-50"
+            >
+              {suggestion}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       {/* Minimalist Message Composer Bar */}
       <form

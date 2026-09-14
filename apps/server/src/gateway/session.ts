@@ -398,15 +398,33 @@ export class SessionChannel implements SessionChannelHandle {
       if (contract.state === 'CLOSING' && isRecapCard(card)) recapCardId = record.id;
     }
 
-    // Memory ops (R6.5). append_log writes a log entry when a patient is on file;
-    // set_fact is a session-scoped note captured in mode_transitions for now (the
-    // full memory service is Task 19). We never fabricate patient context.
+    // Memory ops (R6.5). Resolve the session's own patient once, so dictated log
+    // entries and appointments become part of the next natural conversation rather
+    // than only appearing as a transient card.
+    const caregiverId = repos.session.get(sessionId)?.caregiver_id;
+    const patient = caregiverId ? repos.patient.getByCaregiver(caregiverId) : null;
     for (const op of contract.memory_ops) {
       if (op.op === 'set_fact') {
         repos.session.appendTransition(sessionId, `fact:${op.key}=${op.value}`);
       }
-      // append_log requires a patient_id we don't resolve at Task 7; the memory
-      // service (Task 19) wires that. Left as a seam rather than guessing.
+      if (op.op === 'append_log' && patient) {
+        repos.logEntry.create({
+          patient_id: patient.id,
+          category: op.category,
+          text: op.text,
+          at: op.at ?? new Date().toISOString(),
+          structured: null,
+        });
+      }
+      if (op.op === 'add_appointment' && patient) {
+        repos.appointment.create({
+          patient_id: patient.id,
+          title: op.title,
+          at: op.at,
+          with_whom: op.with_whom ?? null,
+          purpose: op.purpose ?? null,
+        });
+      }
     }
 
     // If the contract closes the session, record the end time and wire the recap card
