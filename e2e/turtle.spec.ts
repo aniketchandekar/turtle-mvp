@@ -11,7 +11,7 @@ const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL ?? 'http://127.0.0.1:8799'
  */
 test.beforeEach(async () => {
   const ctx = await playwrightRequest.newContext();
-  await ctx.delete(`${SERVER_URL}/everything`);
+  await ctx.delete(`${SERVER_URL}/caregivers/local-caregiver/everything`);
   await ctx.dispose();
 });
 
@@ -35,24 +35,75 @@ test.beforeEach(async () => {
  * This browser spec covers the remaining modes + crisis + refusal + recap from the UI.
  */
 
-/** Complete first-run onboarding (AI disclosure + minimal profile + consent) and Start. */
+/** Complete the voice-first caregiver flow through its accessible typed fallback. */
 async function completeOnboarding(page: Page): Promise<void> {
   await page.goto('/');
+  // Catch even a one-frame regression where the regular assistant appears before
+  // the onboarding routing snapshot arrives.
+  await page.evaluate(() => {
+    const markRegularAssistant = () => {
+      if (document.querySelector('[aria-label="Try Turtle voice demo"]')) {
+        document.documentElement.dataset.sawPreOnboardingAssistant = 'true';
+      }
+    };
+    new MutationObserver(markRegularAssistant).observe(document.body, { childList: true, subtree: true });
+  });
   // The product now opens on a marketing page. Enter the live prototype explicitly
   // so the voice session never starts unexpectedly while a visitor is reading.
-  await page.getByRole('button', { name: /^try turtle$/i }).click();
-  // The onboarding dialog is the first thing shown (R16.10).
-  const dialog = page.getByRole('dialog', { name: /welcome to turtle/i });
-  await expect(dialog).toBeVisible();
+  await page.getByRole('button', { name: /try the live voice demo|open the live demo/i }).first().click();
+  const onboarding = page.getByRole('region', { name: /voice setup/i });
+  await expect(onboarding).toBeVisible();
+  await expect(page.locator('html')).not.toHaveAttribute('data-saw-pre-onboarding-assistant', 'true');
+  // Unlock the voice session first; keyboard entry remains available as the fallback.
+  await onboarding.getByRole('button', { name: /start voice conversation/i }).click();
 
-  await dialog.getByRole('button', { name: /set up by typing/i }).click();
-  await page.locator('#ob-name').fill('Sam');
-  // A care-team contact so the medical refusal names a dialable number.
-  await page.locator('#ob-nurse').fill('+1 (555) 123-4567');
-  // Saving the profile records first-run consent, then enters the demo.
-  await page.getByRole('button', { name: /^start$/i }).click();
+  const waitForNextQuestion = async (previous: string | null) => {
+    await page.waitForFunction(
+      (question) => document.querySelector('#onboarding-question')?.textContent !== question,
+      previous,
+    );
+  };
+  const choose = async (name: string | RegExp) => {
+    const previous = await onboarding.locator('#onboarding-question').textContent();
+    await onboarding.getByRole('button', { name }).click();
+    await waitForNextQuestion(previous);
+  };
+  const type = async (value: string) => {
+    const previous = await onboarding.locator('#onboarding-question').textContent();
+    await onboarding.getByRole('button', { name: /i’d rather type/i }).click();
+    await onboarding.getByRole('textbox', { name: /type your answer/i }).fill(value);
+    await onboarding.getByRole('button', { name: /^send$/i }).click();
+    await waitForNextQuestion(previous);
+  };
 
-  // The main app shell replaces onboarding (the Voice/Text tab switch appears).
+  await choose(/^i agree$/i);
+  await type('Alex');
+  await type('daughter');
+  await choose(/^nearby$/i);
+  await choose(/^english$/i);
+  await type('I am the legal decision-maker');
+  await type('My sleep is interrupted');
+  await choose(/yes, everything is right/i);
+  await choose(/yes, authorized/i);
+  await type('Sam');
+  await type('70');
+  await type('metastatic cancer');
+  await choose(/in treatment/i);
+  await type('2026-08-15');
+  await choose(/chemotherapy/i);
+  await type('Austin Cancer Center');
+  await type('Dr. Lee');
+  await type('+1 (555) 123-4567');
+  await type('3 out of 10');
+  await type('normal');
+  await type('eating a little less');
+  await type('alert');
+  await type('no fevers or chills');
+  await type('morphine');
+  await choose(/yes, everything is right/i);
+  await choose(/finish setup/i);
+
+  // Regular Turtle is unlocked only after every required answer is confirmed.
   await expect(page.getByRole('tab', { name: /^text$/i })).toBeVisible();
 }
 
@@ -75,7 +126,7 @@ test.describe('Turtle E2E — scripted session over the text path', () => {
 
     // The first-run greeting is shown in the transcript. (In dev, React StrictMode may
     // double-invoke the mount effect, rendering the greeting twice; assert the first.)
-    await expect(page.getByText(/AI voice companion for family caregivers/i).first()).toBeVisible();
+    await expect(page.getByText(/setup is complete|what feels most important/i).first()).toBeVisible();
 
     // CHECK-IN — a supportive turn. The assistant replies (contract `say` rendered).
     await say(page, "I'm exhausted and I don't know how much longer I can keep this up.");
@@ -89,7 +140,7 @@ test.describe('Turtle E2E — scripted session over the text path', () => {
     const logCard = page.getByRole('dialog', { name: /logged/i });
     await expect(logCard).toBeVisible();
     // Dismiss it so the surface is clear for the next assertion (one active card, R10.6).
-    await logCard.getByRole('button', { name: /dismiss/i }).click();
+    await logCard.getByRole('button', { name: 'Dismiss', exact: true }).click();
     await expect(logCard).toBeHidden();
 
     // Q&A — a diagnosis question with no KB wired declines rather than guessing (R8.3).
@@ -106,7 +157,7 @@ test.describe('Turtle E2E — scripted session over the text path', () => {
     await expect(crisisCard).toBeVisible();
     await expect(page.getByText(/988/).first()).toBeVisible();
     await expect(crisisCard.getByRole('button', { name: /call/i })).toBeVisible();
-    await crisisCard.getByRole('button', { name: /dismiss/i }).click();
+    await crisisCard.getByRole('button', { name: 'Dismiss', exact: true }).click();
 
     // MEDICAL REFUSAL — refuse + redirect with an actionable care-team card (R5.3/R5.4).
     // The card carries a single action button; whether it is a dialable "Call" depends on
@@ -118,7 +169,7 @@ test.describe('Turtle E2E — scripted session over the text path', () => {
     await expect(refusalCard).toBeVisible();
     // No dosing was given (never a partial answer).
     await expect(page.getByText(/\bmg\b|milligram/i)).toHaveCount(0);
-    await refusalCard.getByRole('button', { name: /dismiss/i }).click();
+    await refusalCard.getByRole('button', { name: 'Dismiss', exact: true }).click();
 
     // RECAP / CLOSE — a closing phrase speaks a recap and shows a recap card (R14).
     await say(page, 'I have to go now.');

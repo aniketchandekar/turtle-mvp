@@ -32,6 +32,7 @@ const sdkConnectFactory: DeepgramConnectFactory = (opts: DeepgramConnectOptions)
     endpointing: 300,
     punctuate: true,
     smart_format: true,
+    language: opts.language,
   });
 
   return {
@@ -61,6 +62,9 @@ const sdkConnectFactory: DeepgramConnectFactory = (opts: DeepgramConnectOptions)
     finalize() {
       // v3+ exposes finalize(); guarded in case of client differences.
       (connection as unknown as { finalize?: () => void }).finalize?.();
+    },
+    keepAlive() {
+      (connection as unknown as { keepAlive?: () => void }).keepAlive?.();
     },
     requestClose() {
       (connection as unknown as { requestClose?: () => void }).requestClose?.();

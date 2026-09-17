@@ -9,12 +9,16 @@ import {
   type CardActionKind,
   type ClientMessage,
   type OnboardingPrompt,
+  type OnboardingSnapshot,
+  type OnboardingStepId,
+  type OnboardingLocale,
   type ServerMessage,
   type TurnContract,
 } from '@turtle/shared';
 import { useAudioCapture } from './audio/useAudioCapture';
 import { usePlaybackVad } from './audio/usePlaybackVad';
 import { PcmPlayer } from './audio/PcmPlayer';
+import { voiceDebug } from './audio/voiceDebug';
 
 const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL ?? 'http://localhost:8787';
 // Local single-user MVP: a fixed caregiver id is fine here (auth seam left for later).
@@ -47,6 +51,7 @@ export interface SessionEvents {
   onCard?(card: Card | null): void;
   /** The server's single active first-run onboarding card. */
   onOnboardingPrompt?(prompt: OnboardingPrompt): void;
+  onOnboardingSnapshot?(snapshot: OnboardingSnapshot): void;
   onError?(code: string, message: string, degraded: boolean): void;
 }
 
@@ -78,11 +83,18 @@ export interface SessionApi {
    */
   sendCardAction(cardId: string, kind: CardActionKind): void;
   /** Submit the value typed into the active onboarding card. */
-  sendOnboardingAnswer(value: string): void;
+  sendOnboardingAnswer(promptId: string, value: string, captureMethod?: 'voice' | 'typed'): void;
   /** Accept the displayed onboarding answer and advance to the next question. */
-  confirmOnboarding(): void;
+  confirmOnboarding(promptId: string): void;
   /** Return the active onboarding card to edit mode without saving anything. */
-  editOnboarding(): void;
+  editOnboarding(promptId: string, stepId: OnboardingStepId): void;
+  skipOnboarding(promptId: string): void;
+  backOnboarding(promptId: string): void;
+  pauseOnboarding(promptId: string): void;
+  resumeOnboarding(): void;
+  /** Unlock playback and ask ElevenLabs to speak the active onboarding question again. */
+  replayOnboarding(promptId: string): Promise<void>;
+  switchOnboardingLanguage(promptId: string, locale: OnboardingLocale): void;
 }
 
 /**
@@ -106,6 +118,12 @@ export function useSession(events: SessionEvents = {}): SessionApi {
   const wsRef = useRef<WebSocket | null>(null);
   const playerRef = useRef<PcmPlayer | null>(null);
   const boundRef = useRef(false);
+  const sessionIdRef = useRef<string | null>(null);
+  const uplinkChunksRef = useRef(0);
+  const uplinkBytesRef = useRef(0);
+  const uplinkDropLoggedRef = useRef(false);
+  const downlinkChunksRef = useRef(0);
+  const downlinkBytesRef = useRef(0);
 
   /**
    * The card from the turn whose audio is currently playing, held until playback
@@ -134,11 +152,21 @@ export function useSession(events: SessionEvents = {}): SessionApi {
 
   const sendControl = useCallback((msg: ClientMessage) => {
     const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      voiceDebug('control_send_skipped', {
+        type: msg.type,
+        websocket_state: ws?.readyState ?? null,
+      }, 'warn');
+      return;
+    }
     // Validate against the shared protocol before sending (parity with the server).
     const parsed = clientMessageSchema.safeParse(msg);
-    if (!parsed.success) return;
+    if (!parsed.success) {
+      voiceDebug('control_validation_failed', { type: msg.type }, 'error');
+      return;
+    }
     ws.send(JSON.stringify(msg));
+    voiceDebug('control_sent', { type: msg.type, session_id: sessionIdRef.current });
   }, []);
 
   // ---- Capture wiring: stream PCM up while held ----
@@ -147,6 +175,19 @@ export function useSession(events: SessionEvents = {}): SessionApi {
       const ws = wsRef.current;
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(pcm); // binary audio_chunk frame (16 kHz mono PCM)
+        uplinkChunksRef.current += 1;
+        uplinkBytesRef.current += pcm.byteLength;
+        if (uplinkChunksRef.current === 1) {
+          voiceDebug('audio_uplink_started', {
+            session_id: sessionIdRef.current,
+            first_chunk_bytes: pcm.byteLength,
+          });
+        }
+      } else if (!uplinkDropLoggedRef.current) {
+        uplinkDropLoggedRef.current = true;
+        voiceDebug('audio_uplink_unavailable', {
+          websocket_state: ws?.readyState ?? null,
+        }, 'error');
       }
     },
     onError: (err) => {
@@ -156,6 +197,7 @@ export function useSession(events: SessionEvents = {}): SessionApi {
           ? 'Microphone access is off.'
           : 'Microphone unavailable.';
       setMicError(message);
+      voiceDebug('microphone_error_surfaced', { error_name: err.name }, 'error');
       evRef.current.onError?.('mic_error', message, false);
     },
   });
@@ -163,12 +205,20 @@ export function useSession(events: SessionEvents = {}): SessionApi {
   const pressStart = useCallback(() => {
     setMicError(null);
     setCapturing(true);
+    uplinkChunksRef.current = 0;
+    uplinkBytesRef.current = 0;
+    uplinkDropLoggedRef.current = false;
+    voiceDebug('push_to_talk_started', {
+      session_id: sessionIdRef.current,
+      websocket_state: wsRef.current?.readyState ?? null,
+      assistant_state: assistantState,
+    });
     // Unlock/resume playback on the same user gesture so the AudioContext is allowed.
     void playerRef.current?.resume().catch(() => undefined);
     void capture.start().catch(() => {
       // onError already surfaced the failure and reset state.
     });
-  }, [capture]);
+  }, [assistantState, capture]);
 
   const pressEnd = useCallback(() => {
     if (!capture.isCapturing()) {
@@ -177,6 +227,11 @@ export function useSession(events: SessionEvents = {}): SessionApi {
     }
     capture.stop();
     setCapturing(false);
+    voiceDebug('push_to_talk_ended', {
+      session_id: sessionIdRef.current,
+      pcm_chunks_sent: uplinkChunksRef.current,
+      pcm_bytes_sent: uplinkBytesRef.current,
+    }, uplinkChunksRef.current === 0 ? 'warn' : 'info');
     // Signal end-of-speech for this turn (R2.3/R3 up-path).
     sendControl({ type: 'turn_end' });
   }, [capture, sendControl]);
@@ -234,20 +289,33 @@ export function useSession(events: SessionEvents = {}): SessionApi {
   );
 
   const sendOnboardingAnswer = useCallback(
-    (value: string) => {
+    (promptId: string, value: string, captureMethod: 'voice' | 'typed' = 'typed') => {
       const trimmed = value.trim();
-      if (trimmed) sendControl({ type: 'onboarding_answer', value: trimmed });
+      if (trimmed) sendControl({ type: 'onboarding_answer', prompt_id: promptId, value: trimmed, capture_method: captureMethod });
     },
     [sendControl],
   );
   const confirmOnboarding = useCallback(
-    () => sendControl({ type: 'onboarding_confirm' }),
+    (promptId: string) => sendControl({ type: 'onboarding_section_confirm', prompt_id: promptId }),
     [sendControl],
   );
   const editOnboarding = useCallback(
-    () => sendControl({ type: 'onboarding_edit' }),
+    (promptId: string, stepId: OnboardingStepId) => sendControl({ type: 'onboarding_edit', prompt_id: promptId, step_id: stepId }),
     [sendControl],
   );
+  const skipOnboarding = useCallback((promptId: string) => sendControl({ type: 'onboarding_skip', prompt_id: promptId }), [sendControl]);
+  const backOnboarding = useCallback((promptId: string) => sendControl({ type: 'onboarding_back', prompt_id: promptId }), [sendControl]);
+  const pauseOnboarding = useCallback((promptId: string) => sendControl({ type: 'onboarding_pause', prompt_id: promptId }), [sendControl]);
+  const resumeOnboarding = useCallback(() => sendControl({ type: 'onboarding_resume' }), [sendControl]);
+  const replayOnboarding = useCallback(async (promptId: string) => {
+    // Discard any question audio scheduled before the browser allowed playback.
+    playerRef.current?.flush();
+    pendingCardRef.current = null;
+    awaitingAudioRef.current = false;
+    await playerRef.current?.resume().catch(() => undefined);
+    sendControl({ type: 'onboarding_replay', prompt_id: promptId });
+  }, [sendControl]);
+  const switchOnboardingLanguage = useCallback((promptId: string, locale: OnboardingLocale) => sendControl({ type: 'onboarding_language', prompt_id: promptId, locale }), [sendControl]);
 
   // ---- WebSocket lifecycle: one connection per session, kept open ----
   useEffect(() => {
@@ -275,6 +343,15 @@ export function useSession(events: SessionEvents = {}): SessionApi {
       // it, so an interrupted turn's card never surfaces.
       onIdle: () => {
         if (disposed) return;
+        if (downlinkChunksRef.current > 0) {
+          voiceDebug('tts_playback_finished', {
+            session_id: sessionIdRef.current,
+            pcm_chunks: downlinkChunksRef.current,
+            pcm_bytes: downlinkBytesRef.current,
+          });
+          downlinkChunksRef.current = 0;
+          downlinkBytesRef.current = 0;
+        }
         if (pendingCardRef.current) flushPendingCard();
       },
     });
@@ -282,6 +359,7 @@ export function useSession(events: SessionEvents = {}): SessionApi {
     async function connect() {
       // Create (or reuse) a session id via the REST control plane, then attach the WS.
       let sessionId: string;
+      voiceDebug('session_create_requested', { server_url: SERVER_URL });
       try {
         const res = await fetch(`${SERVER_URL}/sessions`, {
           method: 'POST',
@@ -291,10 +369,13 @@ export function useSession(events: SessionEvents = {}): SessionApi {
         if (!res.ok) throw new Error(`session create failed: ${res.status}`);
         const session = (await res.json()) as { id: string };
         sessionId = session.id;
+        sessionIdRef.current = sessionId;
+        voiceDebug('session_created', { session_id: sessionId });
       } catch {
         if (!disposed) {
           const message = 'Could not reach the Turtle server.';
           evRef.current.onError?.('server_unreachable', message, false);
+          voiceDebug('session_create_failed', { server_url: SERVER_URL }, 'error');
           reconnect();
         }
         return;
@@ -304,12 +385,15 @@ export function useSession(events: SessionEvents = {}): SessionApi {
       const ws = new WebSocket(wsUrl());
       ws.binaryType = 'arraybuffer';
       wsRef.current = ws;
+      voiceDebug('websocket_connecting', { session_id: sessionId });
 
       ws.onopen = () => {
         boundRef.current = true;
         reconnectAttempts = 0;
         // Bind this socket to the session created above.
         ws.send(JSON.stringify({ type: 'attach_session', session_id: sessionId }));
+        voiceDebug('websocket_open', { session_id: sessionId });
+        voiceDebug('control_sent', { type: 'attach_session', session_id: sessionId });
         if (!disposed) setConnected(true);
       };
 
@@ -319,6 +403,14 @@ export function useSession(events: SessionEvents = {}): SessionApi {
           // Note this turn is producing audio, so a pending card waits for the
           // player's idle signal rather than rendering on contract arrival.
           awaitingAudioRef.current = true;
+          downlinkChunksRef.current += 1;
+          downlinkBytesRef.current += event.data.byteLength;
+          if (downlinkChunksRef.current === 1) {
+            voiceDebug('tts_audio_received', {
+              session_id: sessionIdRef.current,
+              first_chunk_bytes: event.data.byteLength,
+            });
+          }
           playerRef.current?.enqueue(event.data);
           return;
         }
@@ -332,10 +424,12 @@ export function useSession(events: SessionEvents = {}): SessionApi {
         boundRef.current = false;
         setConnected(false);
         setAssistantState('IDLE');
+        voiceDebug('websocket_closed', { session_id: sessionId, reconnecting: true }, 'warn');
         reconnect();
       };
       ws.onerror = () => {
         if (!disposed) {
+          voiceDebug('websocket_error', { session_id: sessionId }, 'error');
           evRef.current.onError?.('ws_error', 'Connection interrupted.', false);
         }
       };
@@ -346,24 +440,41 @@ export function useSession(events: SessionEvents = {}): SessionApi {
       try {
         json = JSON.parse(raw);
       } catch {
+        voiceDebug('server_message_invalid_json', { payload_chars: raw.length }, 'warn');
         return;
       }
       const parsed = serverMessageSchema.safeParse(json);
-      if (!parsed.success) return;
+      if (!parsed.success) {
+        voiceDebug('server_message_validation_failed', {
+          message_type: typeof json === 'object' && json !== null && 'type' in json
+            ? String((json as { type?: unknown }).type)
+            : 'unknown',
+        }, 'warn');
+        return;
+      }
       const msg: ServerMessage = parsed.data;
       switch (msg.type) {
         case 'transcript_interim':
+          voiceDebug('transcript_interim_received', { characters: msg.text.length });
           evRef.current.onTranscriptInterim?.(msg.text);
           return;
         case 'transcript_final':
+          voiceDebug('transcript_final_received', { characters: msg.text.length });
           evRef.current.onTranscriptFinal?.(msg.text);
           return;
         case 'assistant_state':
+          voiceDebug('assistant_state_received', { state: msg.state });
           setAssistantState(msg.state);
           evRef.current.onState?.(msg.state);
           return;
         case 'turn_contract': {
           const contract = msg.contract;
+          voiceDebug('turn_contract_received', {
+            turn_id: contract.turn_id,
+            state: contract.state,
+            cards: contract.cards.length,
+            say_characters: contract.say.length,
+          });
           // The spoken line renders into the transcript immediately (contract-driven).
           evRef.current.onContract?.(contract);
           // The card is gated behind the utterance (R10.3/R16.2). Hold this turn's
@@ -383,9 +494,21 @@ export function useSession(events: SessionEvents = {}): SessionApi {
           return;
         }
         case 'onboarding_prompt':
+          voiceDebug('onboarding_prompt_received', {
+            step: msg.prompt.stepId,
+            confirmation: Boolean(msg.prompt.confirmation),
+            complete: Boolean(msg.prompt.complete),
+          });
           evRef.current.onOnboardingPrompt?.(msg.prompt);
           return;
+        case 'onboarding_snapshot':
+          evRef.current.onOnboardingSnapshot?.(msg.snapshot);
+          return;
         case 'error':
+          voiceDebug('server_error_received', {
+            code: msg.code,
+            degraded: Boolean(msg.degraded),
+          }, 'warn');
           evRef.current.onError?.(msg.code, msg.message, msg.degraded ?? false);
           return;
         default:
@@ -399,6 +522,7 @@ export function useSession(events: SessionEvents = {}): SessionApi {
       disposed = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
       boundRef.current = false;
+      voiceDebug('session_disposing', { session_id: sessionIdRef.current });
       capture.stop();
       const ws = wsRef.current;
       if (ws) {
@@ -414,6 +538,7 @@ export function useSession(events: SessionEvents = {}): SessionApi {
       }
       void playerRef.current?.close().catch(() => undefined);
       playerRef.current = null;
+      sessionIdRef.current = null;
     };
     // Intentionally run once per mount: one WebSocket per session, kept open for the
     // whole session (no per-turn reconnect). `capture` is a stable controls object.
@@ -446,5 +571,11 @@ export function useSession(events: SessionEvents = {}): SessionApi {
     sendOnboardingAnswer,
     confirmOnboarding,
     editOnboarding,
+    skipOnboarding,
+    backOnboarding,
+    pauseOnboarding,
+    resumeOnboarding,
+    replayOnboarding,
+    switchOnboardingLanguage,
   };
 }

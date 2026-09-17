@@ -41,6 +41,31 @@ Turtle runs without any API keys. Each missing provider falls back:
 
 `GET /health` reports which capabilities are live vs degraded.
 
+### Voice diagnostics
+
+The local app emits privacy-safe structured voice diagnostics in both consoles by
+default. Browser events use the `[turtle:voice]` prefix; server events are JSON lines
+whose `evt` starts with `voice_`. Logs contain lifecycle events, state, byte/chunk
+counts, timing, and provider status—never audio samples, API keys, patient names, or
+transcript text.
+
+For a healthy spoken turn, look for this sequence:
+
+```text
+voice_microphone_capture_start_requested
+voice_pcm_capture_started
+voice_audio_uplink_started
+voice_gateway_audio_received
+voice_gateway_turn_end
+voice_asr_finalize_sent
+voice_asr_transcript_final
+voice_session_asr_final_received
+```
+
+The first missing event identifies the failed boundary. Set `TURTLE_VOICE_DEBUG=0`
+for the server and/or `NEXT_PUBLIC_VOICE_DEBUG=0` for the web app to disable these
+diagnostics. Restart the corresponding process after changing either value.
+
 ### Trusted caregiver resources
 
 When a caregiver explicitly asks Turtle to find support groups, financial help,

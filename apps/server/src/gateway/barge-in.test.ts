@@ -12,6 +12,7 @@ import {
   type TurnProcessor,
 } from './index.js';
 import type { ServerMessage, TurnContract } from '@turtle/shared';
+import { seedCompletedOnboarding } from './test-onboarding.js';
 
 /**
  * Barge-in — scripted interruption suite (Task 12, R4.3/R4.4/R16.3).
@@ -153,6 +154,7 @@ async function makeHarness(): Promise<Harness> {
     diagnosis_notes: null,
     care_team: { other: [] },
   });
+  seedCompletedOnboarding(store.repos, caregiver.id);
   return {
     cfg,
     store,

@@ -63,7 +63,7 @@ async function request(
 
 describe('GET /health — degraded reporting (R1.2)', () => {
   it('reports degraded with every provider disabled when no keys are set', async () => {
-    const { app } = makeApp(EMPTY);
+    const { app, store } = makeApp(EMPTY);
     const { status, body } = await getJson(app, '/health');
 
     expect(status).toBe(200);
@@ -399,8 +399,8 @@ describe('Onboarding, consent, and AI disclosure (Task 33, R16.10)', () => {
     expect(res.status).toBe(404);
   });
 
-  it('clears needsOnboarding once consent AND a patient profile exist (R16.10)', async () => {
-    const { app } = makeApp(EMPTY);
+  it('does not treat legacy consent_at plus a patient row as auditable onboarding completion', async () => {
+    const { app, store } = makeApp(EMPTY);
     // Bootstrap + consent.
     const boot = await getJson(app, '/onboarding/status?caregiver_id=local-caregiver');
     expect(boot.body.needsOnboarding).toBe(true);
@@ -412,20 +412,25 @@ describe('Onboarding, consent, and AI disclosure (Task 33, R16.10)', () => {
     expect(afterConsent.body.hasProfile).toBe(false);
     expect(afterConsent.body.needsOnboarding).toBe(true);
 
-    // Create the patient profile via the existing minimal-form endpoint.
+    // A patient row cannot be created through HTTP before patient authorization.
     const patient = await request(app, 'POST', '/patients', {
       caregiver_id: 'local-caregiver',
       name: 'Sam',
       diagnosis: 'metastatic_cancer',
       care_team: { nurse_line: '555-1234', other: [] },
     });
-    expect(patient.status).toBe(201);
+    expect(patient.status).toBe(403);
+    store.repos.patient.create({
+      caregiver_id: 'local-caregiver', name: 'Legacy Sam', diagnosis: 'metastatic_cancer',
+      diagnosis_notes: null, care_team: { other: [] },
+    });
 
-    // Now both conditions are met → onboarding complete.
+    // Legacy rows are retained, but the versioned caregiver-first flow remains due.
     const done = await getJson(app, '/onboarding/status?caregiver_id=local-caregiver');
     expect(done.body.hasConsent).toBe(true);
-    expect(done.body.hasProfile).toBe(true);
-    expect(done.body.needsOnboarding).toBe(false);
+    expect(done.body.hasProfile).toBe(false);
+    expect(done.body.needsOnboarding).toBe(true);
+    expect(done.body.currentStep).toBe('ai_data_consent');
   });
 
   it('PATCH /patients/:id edits the existing care profile without creating another patient', async () => {
@@ -438,6 +443,13 @@ describe('Onboarding, consent, and AI disclosure (Task 33, R16.10)', () => {
       diagnosis_notes: null,
       care_team: { other: [] },
     });
+    for (const consent_type of ['ai_data_processing', 'patient_information'] as const) {
+      store.repos.consentRecord.append({
+        caregiver_id: caregiver.id, consent_type, action: 'granted', actor: 'Alex',
+        authority_basis: null, subject: 'family record', capture_method: 'typed',
+        disclosure_version: 'test', locale: 'en', evidence: 'yes',
+      });
+    }
 
     const updated = await request(app, 'PATCH', `/patients/${patient.id}`, {
       name: 'Samuel',
@@ -566,7 +578,7 @@ describe('Privacy — one-click delete everything DELETE /everything (Task 37, R
     const { app, store } = makeApp(EMPTY);
     const seeded = seedEverything(store);
 
-    const res = await request(app, 'DELETE', '/everything');
+    const res = await request(app, 'DELETE', `/everything?caregiver_id=${seeded.cg.id}`);
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ ok: true });
 

@@ -12,6 +12,35 @@ CREATE TABLE IF NOT EXISTS caregiver (
   prefs         TEXT NOT NULL DEFAULT '{}'
 );
 
+-- The full record is encrypted as one versioned JSON document. Keeping only the
+-- caregiver key and timestamps in plaintext makes resume lookup cheap without
+-- exposing intake answers to database inspection.
+CREATE TABLE IF NOT EXISTS onboarding_profile (
+  caregiver_id  TEXT PRIMARY KEY REFERENCES caregiver(id),
+  version       INTEGER NOT NULL,
+  profile       TEXT NOT NULL,
+  updated_at    TEXT NOT NULL
+);
+
+-- Append-only consent evidence. Evidence and authority details are encrypted;
+-- type/action/timestamp remain queryable for current-consent calculation and audit.
+CREATE TABLE IF NOT EXISTS consent_record (
+  id                  TEXT PRIMARY KEY,
+  caregiver_id        TEXT NOT NULL REFERENCES caregiver(id),
+  consent_type        TEXT NOT NULL,
+  action              TEXT NOT NULL,
+  actor               TEXT NOT NULL,
+  authority_basis     TEXT,
+  subject             TEXT NOT NULL,
+  capture_method      TEXT NOT NULL,
+  disclosure_version  TEXT NOT NULL,
+  locale              TEXT NOT NULL,
+  captured_at         TEXT NOT NULL,
+  evidence            TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_consent_caregiver_type_at
+  ON consent_record(caregiver_id, consent_type, captured_at);
+
 CREATE TABLE IF NOT EXISTS patient (
   id               TEXT PRIMARY KEY,
   caregiver_id     TEXT NOT NULL REFERENCES caregiver(id),

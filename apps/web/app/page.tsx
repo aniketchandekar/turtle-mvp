@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { AssistantState, Card, OnboardingPrompt } from '@turtle/shared';
+import type { AssistantState, Card, OnboardingPrompt, OnboardingSnapshot } from '@turtle/shared';
 import {
   Activity,
   ArrowRight,
@@ -24,7 +24,7 @@ import { CardSurface } from '@/components/CardSurface';
 import { DegradedBanner } from '@/components/DegradedBanner';
 import { useHealth } from '@/lib/useHealth';
 import { useOnboarding } from '@/lib/useOnboarding';
-import { Onboarding } from '@/components/Onboarding';
+import { CareProfile } from '@/components/CareProfile';
 import { OnboardingCard } from '@/components/OnboardingCard';
 import { useSession } from '@/lib/useSession';
 import { Orb, type AgentState } from '@/components/ui/orb';
@@ -298,6 +298,9 @@ function TurtleDemo({ onClose }: { onClose: () => void }) {
   const [lines, setLines] = useState<TranscriptLine[]>([]);
   const [card, setCard] = useState<Card | null>(null);
   const [onboardingPrompt, setOnboardingPrompt] = useState<OnboardingPrompt | null>(null);
+  const [onboardingSnapshot, setOnboardingSnapshot] = useState<OnboardingSnapshot | null>(null);
+  const [spokenOnboardingAnswer, setSpokenOnboardingAnswer] = useState('');
+  const [onboardingVoiceFallback, setOnboardingVoiceFallback] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const seq = useRef(0);
   const interimIdRef = useRef<number | null>(null);
@@ -330,24 +333,43 @@ function TurtleDemo({ onClose }: { onClose: () => void }) {
   }, []);
 
   const session = useSession({
-    onTranscriptInterim: upsertInterim,
-    onTranscriptFinal: commitFinal,
+    onTranscriptInterim: (text) => {
+      upsertInterim(text);
+      if (onboardingPrompt && !['review', 'info'].includes(onboardingPrompt.kind)) {
+        setSpokenOnboardingAnswer(text);
+      }
+    },
+    onTranscriptFinal: (text) => {
+      commitFinal(text);
+      if (onboardingPrompt) {
+        setSpokenOnboardingAnswer(text);
+      }
+    },
     onContract: (contract) => {
       if (contract.say) addLine({ speaker: 'assistant', text: contract.say, interim: false });
     },
     onCard: setCard,
     onOnboardingPrompt: (prompt) => {
       setCard(null);
+      setSpokenOnboardingAnswer('');
       setOnboardingPrompt(prompt);
       if (prompt.complete) void onboarding.refresh().finally(() => setOnboardingPrompt(null));
     },
-    onError: (_code, message, degraded) => {
-      if (degraded) addLine({ speaker: 'system', text: message, interim: false });
+    onOnboardingSnapshot: (snapshot) => {
+      setOnboardingSnapshot(snapshot);
+      setOnboardingPrompt(snapshot.status === 'completed' ? null : snapshot.prompt);
+    },
+    onError: (code, message, degraded) => {
+      if (code === 'onboarding_tts_unavailable') setOnboardingVoiceFallback(true);
+      if (degraded || code === 'asr_timeout') {
+        addLine({ speaker: 'system', text: message, interim: false });
+      }
     },
   });
 
   const agentState = useMemo(() => toAgentState(session.assistantState, session.capturing), [session.assistantState, session.capturing]);
   const latestAssistantPrompt = useMemo(() => [...lines].reverse().find((line) => line.speaker === 'assistant')?.text ?? null, [lines]);
+  const latestUserTranscript = useMemo(() => [...lines].reverse().find((line) => line.speaker === 'user')?.text ?? null, [lines]);
 
   const normalCard = card ? (
     <CardSurface
@@ -364,16 +386,7 @@ function TurtleDemo({ onClose }: { onClose: () => void }) {
     />
   ) : null;
 
-  const onboardingCard = onboardingPrompt && !onboardingPrompt.complete ? (
-    <OnboardingCard
-      prompt={onboardingPrompt}
-      onAnswer={session.sendOnboardingAnswer}
-      onConfirm={session.confirmOnboarding}
-      onEdit={session.editOnboarding}
-    />
-  ) : null;
-
-  const activeCardNode = onboardingCard ?? normalCard;
+  const activeCardNode = normalCard;
 
   const [displayedCard, setDisplayedCard] = useState<React.ReactNode | null>(null);
   const [isExiting, setIsExiting] = useState(false);
@@ -397,6 +410,107 @@ function TurtleDemo({ onClose }: { onClose: () => void }) {
   }, [activeCardNode, displayedCard, isExiting]);
 
   const hasSideCard = Boolean(displayedCard);
+
+  // If onboarding is in progress, render the dedicated OnboardingCard view alone
+  if (onboardingPrompt && !onboardingPrompt.complete) {
+    return (
+      <OnboardingCard
+        prompt={onboardingPrompt}
+        snapshot={onboardingSnapshot}
+        liveAnswer={spokenOnboardingAnswer}
+        capturing={session.capturing}
+        agentState={agentState}
+        micError={session.micError}
+        voiceFallback={onboardingVoiceFallback}
+        onReplayPrompt={session.replayOnboarding}
+        onToggleVoice={session.toggleCapture}
+        onAnswer={session.sendOnboardingAnswer}
+        onConfirm={session.confirmOnboarding}
+        onEdit={session.editOnboarding}
+        onSkip={session.skipOnboarding}
+        onBack={session.backOnboarding}
+        onPause={session.pauseOnboarding}
+        onLanguage={session.switchOnboardingLanguage}
+        onClose={onClose}
+      />
+    );
+  }
+
+  // If onboarding is paused or declined, render the paused screen alone
+  if (!onboardingPrompt && onboardingSnapshot && (onboardingSnapshot.status === 'paused' || onboardingSnapshot.status === 'declined')) {
+    return (
+      <section className="fixed inset-0 z-[80] grid place-items-center bg-[#07111f]/90 backdrop-blur-md px-5 text-white" aria-label="Onboarding paused">
+        <button
+          type="button"
+          onClick={onClose}
+          className="fixed right-4 top-4 z-[90] grid h-10 w-10 place-items-center rounded-full border border-white/10 bg-white/[.06] text-slate-200 shadow-md transition hover:bg-white/10 hover:text-white cursor-pointer"
+          aria-label="Close demo"
+        >
+          <X className="h-4 w-4" />
+        </button>
+        <div className="relative w-full max-w-lg rounded-[32px] border border-white/10 bg-[#0b192c] p-8 text-center shadow-[0_24px_70px_rgba(0,0,0,0.5)] sm:p-10">
+          <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-[#1d4ed8] text-[#fbbf24] shadow-md shadow-blue-500/20">
+            <TurtleLogo className="h-7 w-7 fill-current" />
+          </span>
+          <h2 className="mt-6 text-2xl font-extrabold text-white">
+            {onboardingSnapshot.status === 'declined' ? 'Your privacy choice is saved' : 'Your place is saved'}
+          </h2>
+          <p className="mt-3 text-sm leading-6 text-slate-300">
+            {onboardingSnapshot.status === 'declined'
+              ? 'Turtle will not collect patient information or unlock regular conversations without the required permission.'
+              : 'Nothing is lost. Continue from the exact question whenever you are ready.'}
+          </p>
+          <div className="mt-7 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={session.resumeOnboarding}
+              className="h-12 w-full sm:w-auto rounded-2xl bg-[#1d4ed8] px-6 text-sm font-extrabold text-white shadow-[0_10px_24px_rgba(29,78,216,.24)] hover:bg-[#1e40af] cursor-pointer"
+            >
+              {onboardingSnapshot.status === 'declined' ? 'Review consent' : 'Resume setup'}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="h-12 w-full sm:w-auto rounded-2xl border border-white/10 bg-white/[.06] px-6 text-sm font-bold text-slate-200 hover:bg-white/10 cursor-pointer"
+            >
+              Exit demo
+            </button>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  // The WebSocket snapshot is the routing handshake. Until it arrives, do not
+  // briefly reveal the regular assistant underneath first-run onboarding.
+  if (!onboardingSnapshot) {
+    return (
+      <div
+        className="fixed inset-0 z-50 bg-[#0b192c]/70 backdrop-blur-md flex items-center justify-center p-4 sm:p-6"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Connecting to Turtle"
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          className="fixed right-4 top-4 z-[70] grid h-10 w-10 place-items-center rounded-full border border-[#cbd5e1] bg-white text-[#475569] shadow-md transition hover:bg-[#eff6ff] hover:text-[#1d4ed8] cursor-pointer"
+          aria-label="Close demo"
+        >
+          <X className="h-4 w-4" />
+        </button>
+        <div className="flex flex-col items-center gap-4 rounded-3xl border border-[#e2e8f0] bg-white p-8 text-center shadow-xl">
+          <span className="grid h-12 w-12 place-items-center rounded-2xl bg-[#1d4ed8] text-[#fbbf24]">
+            <TurtleLogo className="h-6 w-6 fill-current animate-pulse" />
+          </span>
+          <div>
+            <p className="font-extrabold text-[#0b192c]">Connecting to Turtle…</p>
+            <p className="text-xs text-[#64748b]">Preparing your caregiver session</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -460,6 +574,7 @@ function TurtleDemo({ onClose }: { onClose: () => void }) {
                 micError={session.micError}
                 onToggleCapture={session.toggleCapture}
                 prompt={latestAssistantPrompt}
+                heardText={latestUserTranscript}
                 hasSideCard={hasSideCard}
               />
             ) : (
@@ -481,19 +596,11 @@ function TurtleDemo({ onClose }: { onClose: () => void }) {
         ) : null}
       </div>
 
-      <Onboarding
+      <CareProfile
         isOpen={profileModalOpen}
-        required={false}
         onClose={() => setProfileModalOpen(false)}
-        disclosure={onboarding.disclosure}
-        existingPatient={onboarding.status?.patient}
-        submitting={onboarding.submitting}
-        error={onboarding.error}
-        onSubmit={async (input) => {
-          const saved = await onboarding.submit(input);
-          if (saved) setOnboardingPrompt(null);
-          return saved;
-        }}
+        snapshot={onboarding.status}
+        onRefresh={onboarding.refresh}
       />
     </div>
   );

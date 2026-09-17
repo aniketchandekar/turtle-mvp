@@ -13,6 +13,7 @@ import {
 import { loadConfig, type Config, type EnvSource } from '../config.js';
 import { createStore, type Store } from '../store/index.js';
 import { createE2eProcessor, RECAP_CARD_TITLE } from '../orchestrator/index.js';
+import { seedCompletedOnboarding } from './test-onboarding.js';
 import {
   createGateway,
   type TtsCallbacks,
@@ -117,6 +118,7 @@ async function makeHarness(withTts: boolean): Promise<Harness> {
     diagnosis_notes: null,
     care_team: { other: [] },
   });
+  seedCompletedOnboarding(store.repos, caregiver.id);
   return { cfg, store, server, wss, url: `ws://127.0.0.1:${port}/ws`, caregiverId: caregiver.id, tts };
 }
 

@@ -312,7 +312,7 @@ describe('ElevenLabs provider — streaming a turn (preset + flush + keepalive)'
     const conn = new FakeElevenLabsConnection();
     const { audio, callbacks } = collectingCallbacks();
     const provider = createElevenLabsTtsProvider(cfg, () => conn, vi.fn(async () => {}));
-    const stream = provider.open(callbacks) as TtsStream;
+    provider.open(callbacks);
     conn.emitOpen();
 
     conn.emit(ELEVENLABS_EVENTS.error, new Error('boom'));
@@ -327,13 +327,15 @@ describe('ElevenLabs provider — static pre-render over HTTP streaming', () => 
     let opts: ElevenLabsHttpRenderOptions | undefined;
     const httpRender = vi.fn(async (o: ElevenLabsHttpRenderOptions, onChunk: (c: Buffer) => void) => {
       opts = o;
-      onChunk(Buffer.from([1, 2]));
-      onChunk(Buffer.from([3, 4]));
+      // HTTP stream boundaries are arbitrary and can split a PCM16 sample.
+      onChunk(Buffer.from([1, 2, 3]));
+      onChunk(Buffer.from([4, 5, 6, 7]));
+      onChunk(Buffer.from([8]));
     });
     const provider = createElevenLabsTtsProvider(cfg, () => new FakeElevenLabsConnection(), httpRender);
 
     const chunks: Buffer[] = [];
-    await provider.renderStatic('Turtle is an AI. It never gives medical advice.', (c) => chunks.push(c));
+    await expect(provider.renderStatic('Turtle is an AI. It never gives medical advice.', (c) => chunks.push(c))).resolves.toBe(true);
 
     expect(httpRender).toHaveBeenCalledTimes(1);
     expect(opts).toMatchObject({
@@ -344,8 +346,10 @@ describe('ElevenLabs provider — static pre-render over HTTP streaming', () => 
     });
     expect(chunks.map((b) => [...b])).toEqual([
       [1, 2],
-      [3, 4],
+      [3, 4, 5, 6],
+      [7, 8],
     ]);
+    expect(chunks.every((chunk) => chunk.byteLength % 2 === 0)).toBe(true);
   });
 
   it('is a no-op (no HTTP call) when TTS is degraded', async () => {
@@ -353,7 +357,7 @@ describe('ElevenLabs provider — static pre-render over HTTP streaming', () => 
     const httpRender = vi.fn(async () => {});
     const provider = createElevenLabsTtsProvider(cfg, vi.fn(), httpRender);
 
-    await provider.renderStatic('AI disclosure', () => {});
+    await expect(provider.renderStatic('AI disclosure', () => {})).resolves.toBe(false);
     expect(httpRender).not.toHaveBeenCalled();
   });
 
@@ -364,6 +368,6 @@ describe('ElevenLabs provider — static pre-render over HTTP streaming', () => 
     });
     const provider = createElevenLabsTtsProvider(cfg, () => new FakeElevenLabsConnection(), httpRender);
 
-    await expect(provider.renderStatic('greeting', () => {})).resolves.toBeUndefined();
+    await expect(provider.renderStatic('greeting', () => {})).resolves.toBe(false);
   });
 });

@@ -6,9 +6,11 @@ import type {
   CardRecord,
   KbChunk,
   LogEntry,
+  OnboardingProfile,
   Patient,
   Session,
   Turn,
+  ConsentRecord,
 } from '@turtle/shared';
 import type { DB } from './db.js';
 import type { Cipher } from './crypto.js';
@@ -31,6 +33,10 @@ const s = (v: string | number | null | undefined): string => (v == null ? '' : S
  */
 export function createRepositories(db: DB, cipher: Cipher) {
   return {
+    transaction<T>(work: () => T): T {
+      return db.transaction(work)();
+    },
+
     caregiver: {
       create(input: Partial<Caregiver> & { display_name?: string | null }): Caregiver {
         const row: Caregiver = {
@@ -73,6 +79,81 @@ export function createRepositories(db: DB, cipher: Cipher) {
         const prefs = { ...existing.prefs, ...patch };
         db.prepare(`UPDATE caregiver SET prefs = ? WHERE id = ?`).run(j(prefs), cid);
         return { ...existing, prefs };
+      },
+    },
+
+    onboardingProfile: {
+      get(caregiverId: string): OnboardingProfile | null {
+        const row = db
+          .prepare(`SELECT profile FROM onboarding_profile WHERE caregiver_id = ?`)
+          .get(caregiverId) as { profile: string } | undefined;
+        if (!row) return null;
+        const plaintext = cipher.decrypt(row.profile);
+        return plaintext ? (JSON.parse(plaintext) as OnboardingProfile) : null;
+      },
+      save(profile: OnboardingProfile): OnboardingProfile {
+        db.prepare(
+          `INSERT INTO onboarding_profile (caregiver_id, version, profile, updated_at)
+           VALUES (@caregiver_id, @version, @profile, @updated_at)
+           ON CONFLICT(caregiver_id) DO UPDATE SET
+             version=excluded.version, profile=excluded.profile, updated_at=excluded.updated_at`,
+        ).run({
+          caregiver_id: profile.caregiverId,
+          version: profile.version,
+          profile: cipher.encrypt(j(profile)),
+          updated_at: profile.updatedAt,
+        });
+        return profile;
+      },
+      delete(caregiverId: string): void {
+        db.prepare(`DELETE FROM onboarding_profile WHERE caregiver_id = ?`).run(caregiverId);
+      },
+    },
+
+    consentRecord: {
+      append(input: Omit<ConsentRecord, 'id' | 'captured_at'> & { id?: string; captured_at?: string }): ConsentRecord {
+        const record: ConsentRecord = {
+          ...input,
+          id: input.id ?? id(),
+          captured_at: input.captured_at ?? now(),
+        };
+        db.prepare(
+          `INSERT INTO consent_record
+           (id, caregiver_id, consent_type, action, actor, authority_basis, subject,
+            capture_method, disclosure_version, locale, captured_at, evidence)
+           VALUES (@id, @caregiver_id, @consent_type, @action, @actor, @authority_basis,
+                   @subject, @capture_method, @disclosure_version, @locale, @captured_at, @evidence)`,
+        ).run({
+          ...record,
+          actor: cipher.encrypt(record.actor),
+          authority_basis: cipher.encrypt(record.authority_basis),
+          subject: cipher.encrypt(record.subject),
+          evidence: cipher.encrypt(record.evidence),
+        });
+        return record;
+      },
+      list(caregiverId: string): ConsentRecord[] {
+        const rows = db
+          .prepare(`SELECT * FROM consent_record WHERE caregiver_id = ? ORDER BY captured_at ASC, rowid ASC`)
+          .all(caregiverId) as Row[];
+        return rows.map((row) => ({
+          id: s(row.id),
+          caregiver_id: s(row.caregiver_id),
+          consent_type: row.consent_type as ConsentRecord['consent_type'],
+          action: row.action as ConsentRecord['action'],
+          actor: cipher.decrypt(s(row.actor)) ?? '',
+          authority_basis: cipher.decrypt(row.authority_basis == null ? null : s(row.authority_basis)),
+          subject: cipher.decrypt(s(row.subject)) ?? '',
+          capture_method: row.capture_method as ConsentRecord['capture_method'],
+          disclosure_version: s(row.disclosure_version),
+          locale: row.locale as ConsentRecord['locale'],
+          captured_at: s(row.captured_at),
+          evidence: cipher.decrypt(s(row.evidence)) ?? '',
+        }));
+      },
+      latest(caregiverId: string, consentType: ConsentRecord['consent_type']): ConsentRecord | null {
+        const records = this.list(caregiverId).filter((record) => record.consent_type === consentType);
+        return records.at(-1) ?? null;
       },
     },
 
@@ -526,10 +607,57 @@ export function createRepositories(db: DB, cipher: Cipher) {
       },
     },
 
-    /** Deletes ALL caregiver data. Backs the one-click "delete everything" control. */
+    exportCaregiver(caregiverId: string): Record<string, unknown> | null {
+      const caregiver = db.prepare(`SELECT * FROM caregiver WHERE id = ?`).get(caregiverId) as Row | undefined;
+      if (!caregiver) return null;
+      const patients = db.prepare(`SELECT id FROM patient WHERE caregiver_id = ?`).all(caregiverId) as { id: string }[];
+      const patientRows = patients.map(({ id: patientId }) => {
+        const patient = db.prepare(`SELECT * FROM patient WHERE id = ?`).get(patientId) as Row;
+        return {
+          ...patient,
+          care_team: p(cipher.decrypt(s(patient.care_team)), {}),
+          appointments: db.prepare(`SELECT * FROM appointment WHERE patient_id = ? ORDER BY at ASC`).all(patientId),
+          logs: (db.prepare(`SELECT * FROM log_entry WHERE patient_id = ? ORDER BY at ASC`).all(patientId) as Row[])
+            .map((entry) => ({ ...entry, text: cipher.decrypt(s(entry.text)) ?? '' })),
+        };
+      });
+      const sessions = (db.prepare(`SELECT * FROM session WHERE caregiver_id = ? ORDER BY started_at ASC`).all(caregiverId) as Row[])
+        .map((session) => ({
+          ...session,
+          turns: (db.prepare(`SELECT * FROM turn WHERE session_id = ? ORDER BY seq ASC`).all(s(session.id)) as Row[])
+            .map((turn) => ({ ...turn, text: cipher.decrypt(s(turn.text)) ?? '' })),
+          summaries: db.prepare(`SELECT * FROM card WHERE session_id = ? ORDER BY created_at ASC`).all(s(session.id)),
+        }));
+      return {
+        exported_at: now(),
+        caregiver: { ...caregiver, prefs: p(s(caregiver.prefs), {}) },
+        onboarding_profile: this.onboardingProfile.get(caregiverId),
+        consent_history: this.consentRecord.list(caregiverId),
+        patients: patientRows,
+        sessions,
+      };
+    },
+
+    /** Transactionally delete one caregiver's family record and nothing else. */
+    deleteForCaregiver(caregiverId: string): void {
+      const tx = db.transaction(() => {
+        db.prepare(`DELETE FROM card WHERE session_id IN (SELECT id FROM session WHERE caregiver_id = ?)`).run(caregiverId);
+        db.prepare(`DELETE FROM turn WHERE session_id IN (SELECT id FROM session WHERE caregiver_id = ?)`).run(caregiverId);
+        db.prepare(`DELETE FROM session WHERE caregiver_id = ?`).run(caregiverId);
+        db.prepare(`DELETE FROM log_entry WHERE patient_id IN (SELECT id FROM patient WHERE caregiver_id = ?)`).run(caregiverId);
+        db.prepare(`DELETE FROM appointment WHERE patient_id IN (SELECT id FROM patient WHERE caregiver_id = ?)`).run(caregiverId);
+        db.prepare(`DELETE FROM patient WHERE caregiver_id = ?`).run(caregiverId);
+        db.prepare(`DELETE FROM consent_record WHERE caregiver_id = ?`).run(caregiverId);
+        db.prepare(`DELETE FROM onboarding_profile WHERE caregiver_id = ?`).run(caregiverId);
+        db.prepare(`DELETE FROM caregiver WHERE id = ?`).run(caregiverId);
+      });
+      tx();
+    },
+
+    /** Legacy admin wipe retained for tests and local development. */
     deleteEverything(): void {
       const tx = db.transaction(() => {
-        for (const t of ['card', 'turn', 'session', 'log_entry', 'appointment', 'patient', 'caregiver']) {
+        for (const t of ['card', 'turn', 'session', 'log_entry', 'appointment', 'patient', 'consent_record', 'onboarding_profile', 'caregiver']) {
           db.prepare(`DELETE FROM ${t}`).run();
         }
       });

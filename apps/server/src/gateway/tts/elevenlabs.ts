@@ -1,4 +1,3 @@
-import { TTS_PRESET } from '@turtle/shared';
 import type { Config } from '../../config.js';
 import type { TtsCallbacks, TtsProvider, TtsStream } from '../index.js';
 
@@ -58,6 +57,7 @@ export interface ElevenLabsConnectOptions {
   modelId: string;
   /** e.g. pcm_16000 / pcm_24000 — from the frozen preset / config. */
   outputFormat: string;
+  language?: 'en' | 'es';
 }
 
 /** Factory that opens a live ElevenLabs stream-input connection. Injectable for tests. */
@@ -286,7 +286,7 @@ export function createElevenLabsTtsProvider(
   httpRender: ElevenLabsHttpRenderFactory,
 ): TtsProvider & {
   /** Pre-render a static string (AI disclosure, greeting, crisis, recap) via HTTP streaming. */
-  renderStatic(text: string, onChunk: (chunk: Buffer) => void): Promise<void>;
+  renderStatic(text: string, onChunk: (chunk: Buffer) => void): Promise<boolean>;
 } {
   const apiKey = cfg.elevenlabs.apiKey;
   const voiceId = cfg.elevenlabs.voiceId;
@@ -295,7 +295,7 @@ export function createElevenLabsTtsProvider(
 
   return {
     live,
-    open(callbacks: TtsCallbacks): TtsStream | null {
+    open(callbacks: TtsCallbacks, language: 'en' | 'es' = 'en'): TtsStream | null {
       if (!live || !apiKey || !voiceId) return null;
       let conn: ElevenLabsConnection;
       try {
@@ -304,6 +304,7 @@ export function createElevenLabsTtsProvider(
           voiceId,
           modelId: cfg.elevenlabs.modelId,
           outputFormat: cfg.elevenlabs.outputFormat,
+          language,
         });
       } catch {
         // Failing to open a synthesizer must not take the session down — degrade to
@@ -313,19 +314,50 @@ export function createElevenLabsTtsProvider(
       return new ElevenLabsTtsStream(conn, cfg, apiKey, callbacks);
     },
 
-    async renderStatic(text: string, onChunk: (chunk: Buffer) => void): Promise<void> {
+    async renderStatic(text: string, onChunk: (chunk: Buffer) => void): Promise<boolean> {
       // Static strings are pre-rendered through HTTP streaming for sub-100ms
       // availability. When TTS is degraded this is a no-op (text-only).
-      if (!live || !apiKey || !voiceId) return;
+      if (!live || !apiKey || !voiceId) return false;
       const say = text.trim();
-      if (say.length === 0) return;
+      if (say.length === 0) return false;
+      let emittedAudio = false;
+      // A fetch stream may split anywhere, including between the two bytes of a
+      // signed PCM16 sample. Forwarding those chunks independently causes the
+      // browser to discard the orphan byte and decode every later sample out of
+      // alignment, which is heard as loud static. Carry that byte into the next
+      // network chunk so every WebSocket audio frame contains complete samples.
+      let pendingByte: number | null = null;
       try {
         await httpRender(
           { apiKey, voiceId, modelId: cfg.elevenlabs.modelId, outputFormat: cfg.elevenlabs.outputFormat, text: say },
-          onChunk,
+          (chunk) => {
+            if (chunk.byteLength === 0) return;
+
+            let framed = chunk;
+            if (pendingByte !== null) {
+              framed = Buffer.allocUnsafe(chunk.byteLength + 1);
+              framed[0] = pendingByte;
+              chunk.copy(framed, 1);
+              pendingByte = null;
+            }
+
+            const completeLength = framed.byteLength - (framed.byteLength % 2);
+            if (completeLength < framed.byteLength) {
+              pendingByte = framed[framed.byteLength - 1]!;
+            }
+            if (completeLength === 0) return;
+
+            emittedAudio = true;
+            onChunk(framed.subarray(0, completeLength));
+          },
         );
+        // A valid PCM16 response is always even-sized. If the provider ever ends
+        // on one byte, dropping only that incomplete sample is safer than sending
+        // a malformed frame to the player.
+        return emittedAudio;
       } catch {
         // Pre-render failure degrades to text-only for that phrase; never crash.
+        return false;
       }
     },
   };

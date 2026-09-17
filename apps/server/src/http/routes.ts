@@ -6,11 +6,15 @@ import {
   DIAGNOSES,
   LOG_CATEGORIES,
   caregiverPrefsSchema,
+  consentMutationSchema,
+  consentTypeSchema,
+  onboardingCorrectionSchema,
 } from '@turtle/shared';
 import type { Config } from '../config.js';
 import type { Store } from '../store/index.js';
 import { createCardService } from '../services/cards/index.js';
 import { computeMetrics, listFlaggedTranscripts } from '../observability/index.js';
+import { createOnboardingEngine, ONBOARDING_DISCLOSURE_VERSION } from '../onboarding/engine.js';
 
 /**
  * REST control plane (§22). The same store backs the voice path, so these entities
@@ -22,6 +26,10 @@ export function createRoutes(cfg: Config, store: Store): Router {
   const r = Router();
   const { repos } = store;
   const cards = createCardService({ repos });
+  const onboarding = createOnboardingEngine({ repos });
+  const hasProtectedDataConsent = (caregiverId: string) =>
+    repos.consentRecord.latest(caregiverId, 'ai_data_processing')?.action === 'granted'
+    && repos.consentRecord.latest(caregiverId, 'patient_information')?.action === 'granted';
 
   // GET /health — honest live-vs-degraded report (R1.2). Surfaces each provider's
   // `live` boolean and fallback message, plus a clear top-level summary of whether
@@ -107,6 +115,9 @@ export function createRoutes(cfg: Config, store: Store): Router {
   r.post('/patients', (req, res) => {
     const parsed = createPatientSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    if (!hasProtectedDataConsent(parsed.data.caregiver_id)) {
+      return res.status(403).json({ error: 'AI/data consent and patient-information authorization are required first' });
+    }
     const p = repos.patient.create({
       caregiver_id: parsed.data.caregiver_id,
       name: parsed.data.name,
@@ -136,6 +147,9 @@ export function createRoutes(cfg: Config, store: Store): Router {
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     const existing = repos.patient.get(req.params.id);
     if (!existing) return res.status(404).json({ error: 'not found' });
+    if (!hasProtectedDataConsent(existing.caregiver_id)) {
+      return res.status(403).json({ error: 'active patient-information authorization required' });
+    }
     const updated = repos.patient.update(req.params.id, {
       name: parsed.data.name,
       diagnosis: parsed.data.diagnosis,
@@ -244,13 +258,13 @@ export function createRoutes(cfg: Config, store: Store): Router {
     let cg = repos.caregiver.get(caregiverId);
     if (!cg) cg = repos.caregiver.create({ id: caregiverId, display_name: null });
     const patient = repos.patient.getByCaregiver(cg.id);
-    const hasConsent = cg.consent_at != null;
-    const hasProfile = patient != null;
+    const snapshot = onboarding.getSnapshot(cg.id);
+    const hasConsent = snapshot.consents.ai_data_processing === 'granted';
+    const hasProfile = snapshot.status === 'completed';
     return res.json({
+      ...snapshot,
       caregiver_id: cg.id,
-      // Onboarding is required until BOTH consent and a patient profile exist (R16.10:
-      // explicit consent before the first session; the profile is the minimal form).
-      needsOnboarding: !(hasConsent && hasProfile),
+      needsOnboarding: snapshot.status !== 'completed',
       hasConsent,
       hasProfile,
       patient: patient ?? null,
@@ -267,9 +281,87 @@ export function createRoutes(cfg: Config, store: Store): Router {
   r.post('/caregivers/:id/consent', (req, res) => {
     let cg = repos.caregiver.get(req.params.id);
     if (!cg) cg = repos.caregiver.create({ id: req.params.id, display_name: null });
-    repos.caregiver.setConsent(cg.id);
+    const timestamp = new Date().toISOString();
+    repos.transaction(() => {
+      repos.consentRecord.append({
+        caregiver_id: cg.id,
+        consent_type: 'ai_data_processing',
+        action: 'granted',
+        actor: 'caregiver',
+        authority_basis: null,
+        subject: 'family record',
+        capture_method: 'typed',
+        disclosure_version: ONBOARDING_DISCLOSURE_VERSION,
+        locale: 'en',
+        evidence: typeof req.body?.evidence === 'string' ? req.body.evidence : 'Explicit web consent',
+      });
+      repos.caregiver.setConsent(cg.id, timestamp);
+    });
     const updated = repos.caregiver.get(cg.id);
     return res.status(201).json(updated);
+  });
+
+  r.patch('/caregivers/:id/onboarding/profile', (req, res) => {
+    if (!repos.caregiver.get(req.params.id)) return res.status(404).json({ error: 'not found' });
+    const parsed = onboardingCorrectionSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    const current = onboarding.getSnapshot(req.params.id);
+    if (current.status !== 'completed' || !hasProtectedDataConsent(req.params.id)) {
+      return res.status(403).json({ error: 'complete onboarding and active authorization required' });
+    }
+    try {
+      return res.json(onboarding.correct(req.params.id, parsed.data.stepId, parsed.data.value));
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : 'invalid correction' });
+    }
+  });
+
+  r.get('/caregivers/:id/consents', (req, res) => {
+    if (!repos.caregiver.get(req.params.id)) return res.status(404).json({ error: 'not found' });
+    return res.json({ records: repos.consentRecord.list(req.params.id) });
+  });
+
+  r.post('/caregivers/:id/consents/:type', (req, res) => {
+    if (!repos.caregiver.get(req.params.id)) return res.status(404).json({ error: 'not found' });
+    const consentType = consentTypeSchema.safeParse(req.params.type);
+    const mutation = consentMutationSchema.safeParse(req.body);
+    if (!consentType.success) return res.status(400).json({ error: consentType.error.flatten() });
+    if (!mutation.success) return res.status(400).json({ error: mutation.error.flatten() });
+    const record = repos.transaction(() => {
+      const appended = repos.consentRecord.append({
+        caregiver_id: req.params.id,
+        consent_type: consentType.data,
+        action: mutation.data.action,
+        actor: mutation.data.actor,
+        authority_basis: mutation.data.authorityBasis ?? null,
+        subject: mutation.data.subject,
+        capture_method: mutation.data.captureMethod,
+        disclosure_version: ONBOARDING_DISCLOSURE_VERSION,
+        locale: mutation.data.locale,
+        evidence: mutation.data.evidence,
+      });
+      if (mutation.data.action !== 'granted' && consentType.data !== 'outbound_ai_call') {
+        const profile = repos.onboardingProfile.get(req.params.id);
+        if (profile) {
+          profile.status = 'declined';
+          profile.currentStep = consentType.data === 'ai_data_processing' ? 'ai_data_consent' : 'patient_authorization';
+          profile.completedAt = null;
+          profile.activeSince = null;
+          profile.revision += 1;
+          profile.updatedAt = new Date().toISOString();
+          repos.onboardingProfile.save(profile);
+        }
+      }
+      return appended;
+    });
+    return res.status(201).json(record);
+  });
+
+  r.get('/caregivers/:id/export', (req, res) => {
+    const record = repos.exportCaregiver(req.params.id);
+    if (!record) return res.status(404).json({ error: 'not found' });
+    res.setHeader('Content-Disposition', `attachment; filename="turtle-record-${req.params.id}.json"`);
+    return res.json(record);
   });
 
   // PATCH /caregivers/:id/prefs — pick check-in time and voice preferences (R16.10).
@@ -297,8 +389,14 @@ export function createRoutes(cfg: Config, store: Store): Router {
   });
 
   // ---- Privacy: one-click delete everything ----
-  r.delete('/everything', (_req, res) => {
-    repos.deleteEverything();
+  r.delete('/caregivers/:id/everything', (req, res) => {
+    repos.deleteForCaregiver(req.params.id);
+    return res.json({ ok: true });
+  });
+
+  r.delete('/everything', (req, res) => {
+    const caregiverId = typeof req.query.caregiver_id === 'string' ? req.query.caregiver_id : 'local-caregiver';
+    repos.deleteForCaregiver(caregiverId);
     return res.json({ ok: true });
   });
 

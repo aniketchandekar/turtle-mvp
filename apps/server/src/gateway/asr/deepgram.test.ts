@@ -7,6 +7,7 @@ import { createStore, type Store } from '../../store/index.js';
 import { createGateway } from '../index.js';
 import type { AsrCallbacks, AsrProvider, AsrStream } from '../index.js';
 import type { ServerMessage } from '@turtle/shared';
+import { seedCompletedOnboarding } from '../test-onboarding.js';
 import {
   createDeepgramAsrProvider,
   DEEPGRAM_EVENTS,
@@ -34,6 +35,7 @@ class FakeDeepgramConnection implements DeepgramLiveConnection {
   private listeners = new Map<string, Array<(payload?: unknown) => void>>();
   sent: Buffer[] = [];
   finalizeCount = 0;
+  keepAliveCount = 0;
   closeCount = 0;
 
   on(event: string, listener: (payload?: unknown) => void): void {
@@ -48,6 +50,10 @@ class FakeDeepgramConnection implements DeepgramLiveConnection {
 
   finalize(): void {
     this.finalizeCount += 1;
+  }
+
+  keepAlive(): void {
+    this.keepAliveCount += 1;
   }
 
   requestClose(): void {
@@ -184,6 +190,40 @@ describe('Deepgram provider — audio forwarding', () => {
 
     stream.endTurn();
     expect(conn.finalizeCount).toBe(1);
+  });
+
+  it('flushes buffered audio before finalizing when the socket opens late', () => {
+    const conn = new FakeDeepgramConnection();
+    const provider = createDeepgramAsrProvider(cfg, () => conn);
+    const stream = provider.open(collectingCallbacks().callbacks) as AsrStream;
+
+    stream.pushAudio(Buffer.from([1, 2, 3, 4]));
+    stream.endTurn();
+    expect(conn.sent).toHaveLength(0);
+    expect(conn.finalizeCount).toBe(0);
+
+    conn.emitOpen();
+    expect(conn.sent).toHaveLength(1);
+    expect(conn.finalizeCount).toBe(1);
+  });
+
+  it('keeps an idle recognizer alive until the stream closes', () => {
+    vi.useFakeTimers();
+    try {
+      const conn = new FakeDeepgramConnection();
+      const provider = createDeepgramAsrProvider(cfg, () => conn);
+      const stream = provider.open(collectingCallbacks().callbacks) as AsrStream;
+      conn.emitOpen();
+
+      vi.advanceTimersByTime(12_000);
+      expect(conn.keepAliveCount).toBe(3);
+
+      stream.close();
+      vi.advanceTimersByTime(8_000);
+      expect(conn.keepAliveCount).toBe(3);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('stops forwarding and closes after the connection errors', () => {
@@ -334,6 +374,7 @@ async function makeWireHarness(): Promise<WireHarness> {
     diagnosis_notes: null,
     care_team: { other: [] },
   });
+  seedCompletedOnboarding(store.repos, caregiver.id);
   return {
     store,
     server,

@@ -44,9 +44,13 @@ export interface AsrStream {
 }
 
 export interface AsrCallbacks {
+  /** The upstream recognizer socket is open and ready for audio. */
+  onReady?(): void;
   onInterim(text: string): void;
   /** Committed user turn text; drives the orchestrator handoff. */
   onFinal(text: string, confidence: number | null): void;
+  /** The live recognizer disconnected or failed after it was created. */
+  onUnavailable?(message: string): void;
 }
 
 export interface AsrProvider {
@@ -79,7 +83,9 @@ export interface TtsProvider {
   /** True when a real TTS provider (ElevenLabs) is configured. */
   readonly live: boolean;
   /** Open a per-session synthesizer. Returns null when degraded (text-only). */
-  open(callbacks: TtsCallbacks): TtsStream | null;
+  open(callbacks: TtsCallbacks, language?: 'en' | 'es'): TtsStream | null;
+  /** Stream a complete, already-known utterance. Ideal for onboarding questions. */
+  renderStatic?(text: string, onChunk: (chunk: Buffer) => void): Promise<boolean>;
 }
 
 /**

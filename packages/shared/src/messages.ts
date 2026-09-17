@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ASSISTANT_STATES, CARD_ACTION_KINDS, turnContractSchema } from './contract.js';
+import { ONBOARDING_LOCALES, ONBOARDING_STEP_IDS, onboardingPromptSchema, onboardingSnapshotSchema } from './onboarding.js';
 
 /**
  * WebSocket message types. One connection per session, kept open for the whole session.
@@ -15,11 +16,28 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('turn_end') }),
   z.object({ type: z.literal('interrupt') }),
   z.object({ type: z.literal('text_input'), text: z.string().min(1) }),
-  // Server-guided onboarding keeps the temporary answers on the socket until the
-  // caregiver has reviewed both fields and explicitly confirms them.
-  z.object({ type: z.literal('onboarding_answer'), value: z.string().min(1) }),
-  z.object({ type: z.literal('onboarding_confirm') }),
-  z.object({ type: z.literal('onboarding_edit') }),
+  z.object({
+    type: z.literal('onboarding_answer'),
+    prompt_id: z.string().min(1),
+    value: z.string().min(1),
+    capture_method: z.enum(['voice', 'typed']).default('typed'),
+  }),
+  z.object({ type: z.literal('onboarding_section_confirm'), prompt_id: z.string().min(1) }),
+  z.object({
+    type: z.literal('onboarding_edit'),
+    prompt_id: z.string().min(1),
+    step_id: z.enum(ONBOARDING_STEP_IDS),
+  }),
+  z.object({ type: z.literal('onboarding_skip'), prompt_id: z.string().min(1) }),
+  z.object({ type: z.literal('onboarding_back'), prompt_id: z.string().min(1) }),
+  z.object({ type: z.literal('onboarding_pause'), prompt_id: z.string().min(1) }),
+  z.object({ type: z.literal('onboarding_resume') }),
+  z.object({ type: z.literal('onboarding_replay'), prompt_id: z.string().min(1) }),
+  z.object({
+    type: z.literal('onboarding_language'),
+    prompt_id: z.string().min(1),
+    locale: z.enum(ONBOARDING_LOCALES),
+  }),
   z.object({
     type: z.literal('card_action'),
     card_id: z.string().min(1),
@@ -30,15 +48,7 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
 ]);
 export type ClientMessage = z.infer<typeof clientMessageSchema>;
 
-export const onboardingPromptSchema = z.object({
-  step: z.enum(['name', 'diagnosis', 'complete']),
-  question: z.string().min(1),
-  value: z.string().optional(),
-  choices: z.array(z.string().min(1)).max(4).optional(),
-  confirmation: z.boolean().optional(),
-  complete: z.boolean().optional(),
-});
-export type OnboardingPrompt = z.infer<typeof onboardingPromptSchema>;
+export type { OnboardingPrompt } from './onboarding.js';
 
 // ---- Server -> Client (JSON messages) ----
 export const serverMessageSchema = z.discriminatedUnion('type', [
@@ -47,6 +57,7 @@ export const serverMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('assistant_state'), state: z.enum(ASSISTANT_STATES) }),
   z.object({ type: z.literal('turn_contract'), contract: turnContractSchema }),
   z.object({ type: z.literal('onboarding_prompt'), prompt: onboardingPromptSchema }),
+  z.object({ type: z.literal('onboarding_snapshot'), snapshot: onboardingSnapshotSchema }),
   z.object({
     type: z.literal('error'),
     code: z.string(),

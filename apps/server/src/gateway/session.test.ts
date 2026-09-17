@@ -7,6 +7,7 @@ import { createStore, type Store } from '../store/index.js';
 import { createGateway, type TurnProcessor } from './index.js';
 import { RECAP_CARD_TITLE } from '../orchestrator/recap.js';
 import type { ServerMessage, TurnContract } from '@turtle/shared';
+import { seedCompletedOnboarding } from './test-onboarding.js';
 
 /**
  * WebSocket session channel (Task 7).
@@ -46,6 +47,7 @@ async function makeHarness(env: EnvSource = EMPTY, processor?: TurnProcessor): P
     diagnosis_notes: null,
     care_team: { other: [] },
   });
+  seedCompletedOnboarding(store.repos, caregiver.id);
   return { cfg, store, server, wss, url: `ws://127.0.0.1:${port}/ws`, caregiverId: caregiver.id };
 }
 
@@ -137,6 +139,25 @@ describe('SessionChannel — connect + degradation (R1.2/R3.2)', () => {
     await waitFor(c.messages, (m) => m.some((x) => x.type === 'error' && x.code === 'unknown_session'));
     c.ws.close();
   });
+
+  it('sends the onboarding routing snapshot before a completed caregiver enters the assistant', async () => {
+    const session = harness!.store.repos.session.create(harness!.caregiverId);
+    const client = connect(harness!.url);
+    await client.open;
+    send(client.ws, { type: 'attach_session', session_id: session.id });
+
+    await waitFor(client.messages, (messages) =>
+      messages.some((message) => message.type === 'onboarding_snapshot'),
+    );
+    const snapshot = client.messages.find(
+      (message): message is Extract<ServerMessage, { type: 'onboarding_snapshot' }> =>
+        message.type === 'onboarding_snapshot',
+    );
+    expect(snapshot?.snapshot.status).toBe('completed');
+    expect(snapshot?.snapshot.prompt?.complete).toBe(true);
+    expect(client.messages.some((message) => message.type === 'onboarding_prompt')).toBe(false);
+    client.ws.close();
+  });
 });
 
 describe('SessionChannel — turn routing (R3.2)', () => {
@@ -203,170 +224,96 @@ describe('SessionChannel — turn routing (R3.2)', () => {
     c.ws.close();
   });
 });
-
-describe('SessionChannel — guided first-run onboarding', () => {
+describe('SessionChannel — caregiver-first resumable onboarding', () => {
   beforeEach(async () => {
     harness = await makeHarness();
   });
 
-  it('collects one reviewed answer at a time and saves the profile only at final confirmation', async () => {
-    const caregiver = harness!.store.repos.caregiver.create({ display_name: 'New caregiver' });
+  async function startNewCaregiver(label: string) {
+    const caregiver = harness!.store.repos.caregiver.create({ display_name: label });
     const session = harness!.store.repos.session.create(caregiver.id);
-    const c = connect(harness!.url);
-    await c.open;
-    send(c.ws, { type: 'attach_session', session_id: session.id });
+    const client = connect(harness!.url);
+    await client.open;
+    send(client.ws, { type: 'attach_session', session_id: session.id });
+    await waitFor(client.messages, (messages) =>
+      messages.some((message) => message.type === 'onboarding_prompt' && message.prompt.stepId === 'ai_data_consent'),
+    );
+    return { caregiver, client };
+  }
 
-    await waitFor(c.messages, (messages) =>
-      messages.some((message) => message.type === 'onboarding_prompt' && message.prompt.step === 'name'),
+  it('starts with explicit AI/data consent and persists the caregiver answer that follows', async () => {
+    const { caregiver, client } = await startNewCaregiver('New caregiver');
+    const consent = client.messages.find(
+      (message) => message.type === 'onboarding_prompt' && message.prompt.stepId === 'ai_data_consent',
     );
-    send(c.ws, { type: 'onboarding_answer', value: 'Eleanor' });
-    await waitFor(c.messages, (messages) =>
-      messages.some(
-        (message) =>
-          message.type === 'onboarding_prompt' &&
-          message.prompt.step === 'name' &&
-          message.prompt.confirmation === true,
-      ),
+    if (!consent || consent.type !== 'onboarding_prompt') throw new Error('missing consent prompt');
+
+    send(client.ws, { type: 'onboarding_answer', prompt_id: consent.prompt.id, value: 'I agree', capture_method: 'typed' });
+    await waitFor(client.messages, (messages) =>
+      messages.some((message) => message.type === 'onboarding_prompt' && message.prompt.stepId === 'caregiver_name'),
     );
+    expect(harness!.store.repos.consentRecord.latest(caregiver.id, 'ai_data_processing')?.action).toBe('granted');
     expect(harness!.store.repos.patient.getByCaregiver(caregiver.id)).toBeNull();
 
-    send(c.ws, { type: 'onboarding_confirm' });
-    await waitFor(c.messages, (messages) =>
-      messages.some(
-        (message) =>
-          message.type === 'onboarding_prompt' &&
-          message.prompt.step === 'diagnosis' &&
-          !message.prompt.confirmation,
-      ),
+    const name = [...client.messages].reverse().find(
+      (message) => message.type === 'onboarding_prompt' && message.prompt.stepId === 'caregiver_name',
     );
-    send(c.ws, { type: 'onboarding_answer', value: 'metastatic cancer' });
-    await waitFor(c.messages, (messages) =>
-      messages.some(
-        (message) =>
-          message.type === 'onboarding_prompt' &&
-          message.prompt.step === 'diagnosis' &&
-          message.prompt.confirmation === true,
-      ),
+    if (!name || name.type !== 'onboarding_prompt') throw new Error('missing name prompt');
+    send(client.ws, { type: 'onboarding_answer', prompt_id: name.prompt.id, value: 'Alex', capture_method: 'typed' });
+    await waitFor(client.messages, (messages) =>
+      messages.some((message) => message.type === 'onboarding_prompt' && message.prompt.stepId === 'caregiver_relationship'),
     );
-    expect(harness!.store.repos.patient.getByCaregiver(caregiver.id)).toBeNull();
-
-    send(c.ws, { type: 'onboarding_confirm' });
-    await waitFor(c.messages, (messages) =>
-      messages.some((message) => message.type === 'onboarding_prompt' && message.prompt.complete),
-    );
-    expect(harness!.store.repos.patient.getByCaregiver(caregiver.id)).toMatchObject({
-      name: 'Eleanor',
-      diagnosis: 'metastatic_cancer',
-    });
-    expect(harness!.store.repos.caregiver.get(caregiver.id)?.consent_at).not.toBeNull();
-    c.ws.close();
+    expect(harness!.store.repos.onboardingProfile.get(caregiver.id)?.answers.caregiver_name?.raw).toBe('Alex');
+    client.ws.close();
   });
 
-  it('supports voice-driven answer and confirmation before submitting profile', async () => {
-    const caregiver = harness!.store.repos.caregiver.create({ display_name: 'Voice caregiver' });
-    const session = harness!.store.repos.session.create(caregiver.id);
-    const c = connect(harness!.url);
-    await c.open;
-    send(c.ws, { type: 'attach_session', session_id: session.id });
-
-    // Step 1: Name prompt arrives
-    await waitFor(c.messages, (messages) =>
-      messages.some((m) => m.type === 'onboarding_prompt' && m.prompt.step === 'name' && !m.prompt.confirmation),
+  it('rejects stale duplicate events without overwriting the saved answer', async () => {
+    const { caregiver, client } = await startNewCaregiver('Duplicate caregiver');
+    const consent = client.messages.find(
+      (message) => message.type === 'onboarding_prompt' && message.prompt.stepId === 'ai_data_consent',
     );
-
-    // Spoken answer for name via voice/turn text input
-    send(c.ws, { type: 'text_input', text: 'Sarah' });
-
-    // Step 1 confirm prompt arrives
-    await waitFor(c.messages, (messages) =>
-      messages.some(
-        (m) =>
-          m.type === 'onboarding_prompt' &&
-          m.prompt.step === 'name' &&
-          m.prompt.confirmation === true &&
-          m.prompt.value === 'Sarah',
-      ),
+    if (!consent || consent.type !== 'onboarding_prompt') throw new Error('missing consent prompt');
+    const event = { type: 'onboarding_answer', prompt_id: consent.prompt.id, value: 'I agree', capture_method: 'typed' };
+    send(client.ws, event);
+    await waitFor(client.messages, (messages) =>
+      messages.some((message) => message.type === 'onboarding_prompt' && message.prompt.stepId === 'caregiver_name'),
     );
-    expect(harness!.store.repos.patient.getByCaregiver(caregiver.id)).toBeNull();
-
-    // Spoken confirmation via voice: "Yes, that's right"
-    send(c.ws, { type: 'text_input', text: "Yes, that's right" });
-
-    // Step 2: Diagnosis prompt arrives
-    await waitFor(c.messages, (messages) =>
-      messages.some((m) => m.type === 'onboarding_prompt' && m.prompt.step === 'diagnosis' && !m.prompt.confirmation),
+    send(client.ws, event);
+    await waitFor(client.messages, (messages) =>
+      messages.some((message) => message.type === 'error' && message.code === 'stale_onboarding_prompt'),
     );
-
-    // Spoken answer for diagnosis
-    send(c.ws, { type: 'text_input', text: 'Metastatic cancer' });
-
-    // Step 2 confirm prompt arrives
-    await waitFor(c.messages, (messages) =>
-      messages.some(
-        (m) =>
-          m.type === 'onboarding_prompt' &&
-          m.prompt.step === 'diagnosis' &&
-          m.prompt.confirmation === true,
-      ),
-    );
-    expect(harness!.store.repos.patient.getByCaregiver(caregiver.id)).toBeNull();
-
-    // Spoken confirmation via voice: "Correct"
-    send(c.ws, { type: 'text_input', text: 'Correct' });
-
-    // Complete prompt arrives and profile is persisted
-    await waitFor(c.messages, (messages) =>
-      messages.some((m) => m.type === 'onboarding_prompt' && m.prompt.complete),
-    );
-    expect(harness!.store.repos.patient.getByCaregiver(caregiver.id)).toMatchObject({
-      name: 'Sarah',
-      diagnosis: 'metastatic_cancer',
-    });
-    expect(harness!.store.repos.caregiver.get(caregiver.id)?.consent_at).not.toBeNull();
-    c.ws.close();
+    expect(harness!.store.repos.onboardingProfile.get(caregiver.id)?.currentStep).toBe('caregiver_name');
+    client.ws.close();
   });
 
-  it('supports voice-driven correction when user corrects name during confirmation', async () => {
-    const caregiver = harness!.store.repos.caregiver.create({ display_name: 'Voice caregiver 2' });
-    const session = harness!.store.repos.session.create(caregiver.id);
-    const c = connect(harness!.url);
-    await c.open;
-    send(c.ws, { type: 'attach_session', session_id: session.id });
-
-    await waitFor(c.messages, (messages) =>
-      messages.some((m) => m.type === 'onboarding_prompt' && m.prompt.step === 'name' && !m.prompt.confirmation),
+  it('resumes the exact saved step after an explicit pause and a new socket session', async () => {
+    const { caregiver, client } = await startNewCaregiver('Resuming caregiver');
+    const consent = client.messages.find(
+      (message) => message.type === 'onboarding_prompt' && message.prompt.stepId === 'ai_data_consent',
     );
-
-    // Spoken initial name
-    send(c.ws, { type: 'text_input', text: 'Sam' });
-    await waitFor(c.messages, (messages) =>
-      messages.some(
-        (m) =>
-          m.type === 'onboarding_prompt' &&
-          m.prompt.step === 'name' &&
-          m.prompt.confirmation === true &&
-          m.prompt.value === 'Sam',
-      ),
+    if (!consent || consent.type !== 'onboarding_prompt') throw new Error('missing consent prompt');
+    send(client.ws, { type: 'onboarding_answer', prompt_id: consent.prompt.id, value: 'I agree', capture_method: 'voice' });
+    await waitFor(client.messages, (messages) =>
+      messages.some((message) => message.type === 'onboarding_prompt' && message.prompt.stepId === 'caregiver_name'),
     );
-
-    // Caregiver says correction: "No, her name is Elena"
-    send(c.ws, { type: 'text_input', text: 'No, her name is Elena' });
-    await waitFor(c.messages, (messages) =>
-      messages.some(
-        (m) =>
-          m.type === 'onboarding_prompt' &&
-          m.prompt.step === 'name' &&
-          m.prompt.confirmation === true &&
-          m.prompt.value === 'Elena',
-      ),
+    const name = [...client.messages].reverse().find(
+      (message) => message.type === 'onboarding_prompt' && message.prompt.stepId === 'caregiver_name',
     );
-
-    // Confirm corrected name
-    send(c.ws, { type: 'text_input', text: 'Yes' });
-    await waitFor(c.messages, (messages) =>
-      messages.some((m) => m.type === 'onboarding_prompt' && m.prompt.step === 'diagnosis'),
+    if (!name || name.type !== 'onboarding_prompt') throw new Error('missing name prompt');
+    send(client.ws, { type: 'onboarding_pause', prompt_id: name.prompt.id });
+    await waitFor(client.messages, (messages) =>
+      messages.some((message) => message.type === 'onboarding_snapshot' && message.snapshot.status === 'paused'),
     );
-    c.ws.close();
+    client.ws.close();
+
+    const secondSession = harness!.store.repos.session.create(caregiver.id);
+    const resumed = connect(harness!.url);
+    await resumed.open;
+    send(resumed.ws, { type: 'attach_session', session_id: secondSession.id });
+    await waitFor(resumed.messages, (messages) =>
+      messages.some((message) => message.type === 'onboarding_prompt' && message.prompt.stepId === 'caregiver_name'),
+    );
+    resumed.ws.close();
   });
 });
 

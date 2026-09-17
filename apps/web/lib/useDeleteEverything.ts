@@ -3,6 +3,7 @@
 import { useCallback, useState } from 'react';
 
 const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL ?? 'http://localhost:8787';
+const CAREGIVER_ID = process.env.NEXT_PUBLIC_CAREGIVER_ID ?? 'local-caregiver';
 
 export interface DeleteEverythingApi {
   /** True while the wipe request is in flight. */
@@ -38,7 +39,7 @@ export function useDeleteEverything(): DeleteEverythingApi {
     setDeleting(true);
     setError(null);
     try {
-      const res = await fetch(`${SERVER_URL}/everything`, { method: 'DELETE' });
+      const res = await fetch(`${SERVER_URL}/caregivers/${encodeURIComponent(CAREGIVER_ID)}/everything`, { method: 'DELETE' });
       if (!res.ok) throw new Error(`delete failed: ${res.status}`);
       setDone(true);
       return true;

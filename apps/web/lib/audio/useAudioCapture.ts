@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef } from 'react';
 import { encodeCaptureChunk } from './pcm';
+import { voiceDebug } from './voiceDebug';
 
 const WORKLET_URL = '/worklets/pcm-capture-processor.js';
 
@@ -47,7 +48,11 @@ export function useAudioCapture(callbacks: AudioCaptureCallbacks): AudioCaptureC
   const streamRef = useRef<MediaStream | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const nodeRef = useRef<AudioWorkletNode | null>(null);
+  const silentSinkRef = useRef<GainNode | null>(null);
   const capturingRef = useRef(false);
+  const captureStartedAtRef = useRef<number | null>(null);
+  const chunkCountRef = useRef(0);
+  const byteCountRef = useRef(0);
 
   const ensureContext = useCallback(async (): Promise<AudioContext> => {
     if (!ctxRef.current) {
@@ -55,17 +60,28 @@ export function useAudioCapture(callbacks: AudioCaptureCallbacks): AudioCaptureC
         window.AudioContext ??
         (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       ctxRef.current = new Ctor();
+      voiceDebug('audio_context_created', {
+        sample_rate_hz: ctxRef.current.sampleRate,
+        state: ctxRef.current.state,
+      });
     }
     const ctx = ctxRef.current;
-    if (ctx.state === 'suspended') await ctx.resume();
+    if (ctx.state === 'suspended') {
+      voiceDebug('audio_context_resume_requested');
+      await ctx.resume();
+      voiceDebug('audio_context_resumed', { state: ctx.state });
+    }
     if (!workletReadyRef.current) {
+      voiceDebug('capture_worklet_loading', { url: WORKLET_URL });
       workletReadyRef.current = ctx.audioWorklet.addModule(WORKLET_URL);
     }
     await workletReadyRef.current;
+    voiceDebug('capture_worklet_ready');
     return ctx;
   }, []);
 
   const stop = useCallback(() => {
+    const wasCapturing = capturingRef.current;
     capturingRef.current = false;
     // Disconnect the graph first so no further frames reach the worklet.
     if (sourceRef.current) {
@@ -85,11 +101,28 @@ export function useAudioCapture(callbacks: AudioCaptureCallbacks): AudioCaptureC
       }
       nodeRef.current = null;
     }
+    if (silentSinkRef.current) {
+      try {
+        silentSinkRef.current.disconnect();
+      } catch {
+        /* ignore */
+      }
+      silentSinkRef.current = null;
+    }
     // Stop the mic tracks so the OS "mic in use" indicator turns off (honest indicator).
     if (streamRef.current) {
       for (const track of streamRef.current.getTracks()) track.stop();
       streamRef.current = null;
     }
+    if (wasCapturing) {
+      const startedAt = captureStartedAtRef.current;
+      voiceDebug('microphone_capture_stopped', {
+        duration_ms: startedAt === null ? null : Math.round(performance.now() - startedAt),
+        pcm_chunks: chunkCountRef.current,
+        pcm_bytes: byteCountRef.current,
+      });
+    }
+    captureStartedAtRef.current = null;
   }, []);
 
   const start = useCallback(async (): Promise<void> => {
@@ -98,9 +131,14 @@ export function useAudioCapture(callbacks: AudioCaptureCallbacks): AudioCaptureC
     // getUserMedia round-trip (push-to-talk released early), this flips back to false
     // and we abandon the just-acquired stream rather than leaving the mic live.
     capturingRef.current = true;
+    captureStartedAtRef.current = performance.now();
+    chunkCountRef.current = 0;
+    byteCountRef.current = 0;
+    voiceDebug('microphone_capture_start_requested');
     try {
       const ctx = await ensureContext();
 
+      voiceDebug('microphone_permission_requested');
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
@@ -110,10 +148,18 @@ export function useAudioCapture(callbacks: AudioCaptureCallbacks): AudioCaptureC
         },
         video: false,
       });
+      const track = stream.getAudioTracks()[0];
+      const settings = track?.getSettings();
+      voiceDebug('microphone_stream_acquired', {
+        audio_tracks: stream.getAudioTracks().length,
+        sample_rate_hz: settings?.sampleRate,
+        channel_count: settings?.channelCount,
+      });
 
       // Released before the mic came up: do not go live; free the device immediately.
       if (!capturingRef.current) {
         for (const track of stream.getTracks()) track.stop();
+        voiceDebug('microphone_stream_abandoned', { reason: 'capture_stopped_during_permission' }, 'warn');
         return;
       }
       streamRef.current = stream;
@@ -127,20 +173,42 @@ export function useAudioCapture(callbacks: AudioCaptureCallbacks): AudioCaptureC
         const frames = event.data;
         if (!frames || frames.length === 0) return;
         try {
-          cbRef.current.onChunk(encodeCaptureChunk(frames, inputRate));
+          const pcm = encodeCaptureChunk(frames, inputRate);
+          chunkCountRef.current += 1;
+          byteCountRef.current += pcm.byteLength;
+          if (chunkCountRef.current === 1) {
+            voiceDebug('pcm_capture_started', {
+              input_sample_rate_hz: inputRate,
+              input_frames: frames.length,
+              first_chunk_bytes: pcm.byteLength,
+            });
+          }
+          cbRef.current.onChunk(pcm);
         } catch (err) {
           cbRef.current.onError(err instanceof Error ? err : new Error(String(err)));
         }
       };
 
       source.connect(node);
-      // Intentionally NOT connected to ctx.destination — capture must not echo to
-      // the speakers. The worklet returns no output; it only messages the main thread.
+      // Keep the worklet in the browser's actively-rendered audio graph. Chromium may
+      // cull a branch with no path to an output, which leaves the mic indicator and
+      // waveform active but never calls process() — no PCM then reaches ASR. A zero-
+      // gain sink makes the graph live while guaranteeing the microphone is inaudible.
+      const silentSink = ctx.createGain();
+      silentSink.gain.value = 0;
+      node.connect(silentSink);
+      silentSink.connect(ctx.destination);
       sourceRef.current = source;
       nodeRef.current = node;
+      silentSinkRef.current = silentSink;
+      voiceDebug('microphone_capture_graph_ready', {
+        input_sample_rate_hz: inputRate,
+        output_sample_rate_hz: 16_000,
+      });
     } catch (err) {
       stop();
       const error = err instanceof Error ? err : new Error(String(err));
+      voiceDebug('microphone_capture_failed', { error_name: error.name }, 'error');
       cbRef.current.onError(error);
       throw error;
     }

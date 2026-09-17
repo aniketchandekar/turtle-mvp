@@ -4,6 +4,7 @@ import { AddressInfo } from 'node:net';
 import { WebSocket, WebSocketServer } from 'ws';
 import { loadConfig, type Config, type EnvSource } from '../config.js';
 import { createStore, type Store } from '../store/index.js';
+import { seedCompletedOnboarding } from './test-onboarding.js';
 import {
   createGateway,
   TurnTimer,
@@ -260,6 +261,7 @@ async function makeHarness(): Promise<Harness> {
     diagnosis_notes: null,
     care_team: { other: [] },
   });
+  seedCompletedOnboarding(store.repos, caregiver.id);
   return {
     cfg,
     store,

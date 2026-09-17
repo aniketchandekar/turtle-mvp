@@ -101,6 +101,21 @@ export function createMemoryService(deps: MemoryServiceDeps): MemoryService {
       if (!patient) return { ...EMPTY_CONTEXT };
 
       const profileFacts = assembleProfileFacts(patient, repos.appointment.nextUpcoming(patient.id));
+      const onboarding = repos.onboardingProfile.get(caregiverId);
+      if (onboarding?.status === 'completed') {
+        const allowed = [
+          'caregiver_relationship', 'caregiver_distance', 'language_preference', 'decision_maker',
+          'care_phase', 'last_treatment_date', 'last_treatment_type', 'after_hours_number',
+          'hospice_agency', 'hospice_phone', 'baseline_pain', 'baseline_breathing',
+          'baseline_nutrition', 'baseline_alertness', 'baseline_fever', 'medication_concern',
+        ] as const;
+        for (const key of allowed) {
+          const answer = onboarding.answers[key];
+          if (!answer?.confirmedAt || answer.skipped) continue;
+          const value = answer.normalized ?? answer.raw;
+          if (String(value).trim()) profileFacts[`onboarding.${key}`] = String(value);
+        }
+      }
       const recentSummaries = assembleRecentSummaries(caregiverId, repos);
       const recall = opts.includeRecall
         ? assembleRecall(patient.id, repos, nowDate(), {

@@ -16,6 +16,8 @@ interface Props {
   disabled?: boolean;
   /** The latest gentle prompt, kept visible while the voice-first surface is open. */
   prompt?: string | null;
+  /** Most recent interim or final user transcript, shown as immediate speech feedback. */
+  heardText?: string | null;
   /** Whether a question or action card is currently visible beside the main modal. */
   hasSideCard?: boolean;
 }
@@ -30,6 +32,7 @@ export function VoiceView({
   micError: sessionMicError,
   disabled,
   prompt,
+  heardText,
   hasSideCard = false,
 }: Props) {
   const [waveformError, setWaveformError] = useState<string | null>(null);
@@ -94,6 +97,17 @@ export function VoiceView({
           <p className="mt-2 max-w-sm text-center text-xs font-semibold leading-relaxed text-[#475569] px-4 line-clamp-2">
             “{prompt}”
           </p>
+        ) : null}
+
+        {heardText ? (
+          <div
+            className="mt-2 max-w-sm rounded-2xl rounded-tr-sm bg-[#1d4ed8] px-4 py-2 text-center text-xs font-semibold leading-relaxed text-white shadow-sm"
+            aria-live="polite"
+            aria-label={`You said: ${heardText}`}
+          >
+            <span className="mr-1.5 text-[10px] font-extrabold uppercase tracking-wider text-blue-200">You</span>
+            {heardText}
+          </div>
         ) : null}
       </div>
 

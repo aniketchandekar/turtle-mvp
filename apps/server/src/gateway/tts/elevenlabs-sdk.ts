@@ -32,6 +32,7 @@ function streamInputUrl(opts: ElevenLabsConnectOptions): string {
     model_id: opts.modelId,
     output_format: opts.outputFormat,
   });
+  if (opts.language) params.set('language_code', opts.language);
   return `wss://${ELEVENLABS_HOST}/v1/text-to-speech/${encodeURIComponent(opts.voiceId)}/stream-input?${params.toString()}`;
 }
 

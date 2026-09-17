@@ -5,6 +5,7 @@ import { WebSocket, WebSocketServer } from 'ws';
 import { loadConfig, type Config, type EnvSource } from '../config.js';
 import { createStore, type Store } from '../store/index.js';
 import { createE2eProcessor } from '../orchestrator/index.js';
+import { seedCompletedOnboarding } from './test-onboarding.js';
 import {
   createGateway,
   p50,
@@ -199,6 +200,7 @@ async function makeHarness(processor: TurnProcessor, stepMs = 120, autoCompleteT
     diagnosis_notes: null,
     care_team: { other: [] },
   });
+  seedCompletedOnboarding(store.repos, caregiver.id);
   return { cfg, store, server, wss, url: `ws://127.0.0.1:${port}/ws`, caregiverId: caregiver.id, tts, logs };
 }
 
